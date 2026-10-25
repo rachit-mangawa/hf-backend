@@ -3,6 +3,7 @@ FROM python:3.11-slim
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    HF_HOME=/tmp/hf \
     PORT=7860
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

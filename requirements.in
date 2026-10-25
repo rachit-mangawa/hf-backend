@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+pydantic
+starlette
+git+https://github.com/rachit-mangawa/Semantic-Comment-Analyze.git@v1.1#subdirectory=backend

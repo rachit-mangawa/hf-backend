@@ -108,3 +108,9 @@ def health():
         "loaded": loaded_projects,
         "failed": failed_projects,
     }
+
+
+@app.get("/")
+def root():
+    return health()
+
