@@ -19,7 +19,7 @@ jobs:
 
           TARGET_URL="${{ secrets.HF_SPACE_URL }}"
           if [ -z "$TARGET_URL" ]; then
-            TARGET_URL="https://rachit-mangawa-hf-backend.hf.space/health"
+            TARGET_URL="https://idkhowtocodefr-hf-backend.hf.space/health"
           fi
 
           echo "Sending one keep-alive ping to ${TARGET_URL}..."
