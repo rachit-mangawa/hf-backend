@@ -52,7 +52,12 @@ class RequestLimitMiddleware(BaseHTTPMiddleware):
             return Response(content="Request Timeout", status_code=504)
 
 
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(
+    title="HF Backend",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+)
 
 app.add_middleware(RequestLimitMiddleware, max_size=max_body_size, timeout=request_timeout)
 
