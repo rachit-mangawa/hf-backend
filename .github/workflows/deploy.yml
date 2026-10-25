@@ -1,0 +1,35 @@
+name: Deploy and Restart HF Space
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sync-and-restart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Sync to Hugging Face Space & Restart
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ secrets.HF_SPACE }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "HF_TOKEN secret not set. Skipping Hugging Face sync."
+            exit 0
+          fi
+
+          SPACE_REPO="${HF_SPACE:-rachit-mangawa/hf-backend}"
+          echo "Syncing code to Hugging Face Space: $SPACE_REPO..."
+          git push "https://rachit-mangawa:${HF_TOKEN}@huggingface.co/spaces/${SPACE_REPO}" main:main --force
+
+          echo "Triggering Space restart..."
+          curl -f -s -X POST "https://huggingface.co/api/spaces/${SPACE_REPO}/restart" \
+            -H "Authorization: Bearer ${HF_TOKEN}" || echo "Space restart API request sent."

@@ -2,7 +2,7 @@ name: Space Keep Alive
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 jobs:
@@ -11,9 +11,16 @@ jobs:
     steps:
       - name: Ping Health Endpoint
         run: |
+          HOUR=$(python3 -c "import time; print(int(time.time() // 3600))")
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ $((HOUR % 30)) -ge 6 ]; then
+            echo "Skipping ping: not at 30-hour mark (Hour: $HOUR, Remainder: $((HOUR % 30)))."
+            exit 0
+          fi
+
           TARGET_URL="${{ secrets.HF_SPACE_URL }}"
           if [ -z "$TARGET_URL" ]; then
             TARGET_URL="https://rachit-mangawa-hf-backend.hf.space/health"
           fi
-          echo "Pinging ${TARGET_URL}..."
+
+          echo "Sending one keep-alive ping to ${TARGET_URL}..."
           curl --fail --show-error --silent --max-time 30 "$TARGET_URL" || exit 1
