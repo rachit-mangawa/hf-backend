@@ -18,11 +18,11 @@ jobs:
 
       - name: Sync to Hugging Face Space & Restart
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_BACKEND_SPACE || secrets.HF_TOKEN }}
           HF_SPACE: ${{ secrets.HF_SPACE }}
         run: |
           if [ -z "$HF_TOKEN" ]; then
-            echo "HF_TOKEN secret not set. Skipping Hugging Face sync."
+            echo "HF_BACKEND_SPACE secret not set. Skipping Hugging Face sync."
             exit 0
           fi
 
