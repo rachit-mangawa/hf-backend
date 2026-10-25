@@ -26,9 +26,26 @@ jobs:
             exit 0
           fi
 
-          SPACE_REPO="${HF_SPACE:-rachit-mangawa/hf-backend}"
+          # Detect actual Hugging Face username from token
+          HF_USER=$(curl -s -H "Authorization: Bearer ${HF_TOKEN}" https://huggingface.co/api/whoami-v2 | python3 -c "import sys, json; data = json.load(sys.stdin); print(data.get('name', 'rachit-mangawa'))" 2>/dev/null || echo "rachit-mangawa")
+          echo "Authenticated as Hugging Face user: $HF_USER"
+
+          SPACE_REPO="${HF_SPACE:-${HF_USER}/hf-backend}"
+          SPACE_NAME="${SPACE_REPO#*/}"
+
+          # Check if Space exists; create it if missing
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${HF_TOKEN}" "https://huggingface.co/api/spaces/${SPACE_REPO}")
+          if [ "$HTTP_STATUS" -eq 404 ]; then
+            echo "Space '${SPACE_REPO}' not found. Creating Space with Docker SDK..."
+            CREATE_RES=$(curl -s -X POST "https://huggingface.co/api/repos/create" \
+              -H "Authorization: Bearer ${HF_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\": \"${SPACE_NAME}\", \"type\": \"space\", \"sdk\": \"docker\"}")
+            echo "Create response: $CREATE_RES"
+          fi
+
           echo "Syncing code to Hugging Face Space: $SPACE_REPO..."
-          git push "https://rachit-mangawa:${HF_TOKEN}@huggingface.co/spaces/${SPACE_REPO}" main:main --force
+          git push "https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${SPACE_REPO}" main:main --force
 
           echo "Triggering Space restart..."
           curl -f -s -X POST "https://huggingface.co/api/spaces/${SPACE_REPO}/restart" \
