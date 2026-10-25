@@ -1,0 +1,19 @@
+name: Space Keep Alive
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Health Endpoint
+        run: |
+          TARGET_URL="${{ secrets.HF_SPACE_URL }}"
+          if [ -z "$TARGET_URL" ]; then
+            TARGET_URL="https://rachit-mangawa-hf-backend.hf.space/health"
+          fi
+          echo "Pinging ${TARGET_URL}..."
+          curl --fail --show-error --silent --max-time 30 "$TARGET_URL" || exit 1
