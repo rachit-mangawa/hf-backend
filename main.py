@@ -54,9 +54,9 @@ class RequestLimitMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(
     title="HF Backend",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 app.add_middleware(RequestLimitMiddleware, max_size=max_body_size, timeout=request_timeout)

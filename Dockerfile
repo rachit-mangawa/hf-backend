@@ -11,7 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m -u 1000 user
+RUN useradd -m -u 1000 user && \
+    mkdir -p /tmp/hf /tmp/p2 && \
+    chown -R user:user /tmp/hf /tmp/p2 && \
+    chmod 777 /tmp/hf /tmp/p2
 USER user
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH
