@@ -314,3 +314,40 @@ def test_real_registry():
         assert sem_data["models_loaded"]["embedding"] is True
         assert sem_data["models_loaded"]["classifier_head"] is True
         assert sem_data["models_loaded"]["sentiment"] is True
+
+
+def test_status_page_and_content_negotiation():
+    if "main" in sys.modules:
+        del sys.modules["main"]
+
+    import main
+    with TestClient(main.app) as client:
+        # 1. Dedicated /status endpoint always returns HTML
+        res_status = client.get("/status")
+        assert res_status.status_code == 200
+        assert "text/html" in res_status.headers.get("content-type", "")
+        assert "HF Backend" in res_status.text
+        assert "Registered Services" in res_status.text
+
+        # 2. Browser request to root with Accept: text/html returns HTML
+        res_browser = client.get("/", headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"})
+        assert res_browser.status_code == 200
+        assert "text/html" in res_browser.headers.get("content-type", "")
+        assert "HF Backend" in res_browser.text
+
+        # 3. Explicit format query param
+        res_fmt_html = client.get("/?format=html")
+        assert res_fmt_html.status_code == 200
+        assert "text/html" in res_fmt_html.headers.get("content-type", "")
+
+        res_fmt_json = client.get("/?format=json")
+        assert res_fmt_json.status_code == 200
+        assert "application/json" in res_fmt_json.headers.get("content-type", "")
+        assert res_fmt_json.json()["status"] in ["healthy", "degraded", "unhealthy"]
+
+        # 4. Machine/API request (e.g. curl or monitoring probe) gets JSON by default
+        res_api = client.get("/")
+        assert res_api.status_code == 200
+        assert "application/json" in res_api.headers.get("content-type", "")
+        assert res_api.json()["status"] in ["healthy", "degraded", "unhealthy"]
+

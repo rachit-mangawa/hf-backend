@@ -15,8 +15,10 @@ from typing import Callable
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from dashboard import render_statuspage
 from registry import PROJECT_REGISTRY
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -183,6 +185,15 @@ def health():
     }
 
 
+@app.get("/status", response_class=HTMLResponse)
+def status_page():
+    return HTMLResponse(content=render_statuspage(health()))
+
+
 @app.get("/")
-def root():
-    return health()
+def root(request: Request, format: str | None = None):
+    accept = request.headers.get("accept", "")
+    wants_html = format == "html" or ("text/html" in accept and not accept.startswith("*/*"))
+    if format == "json" or not wants_html:
+        return health()
+    return HTMLResponse(content=render_statuspage(health()))

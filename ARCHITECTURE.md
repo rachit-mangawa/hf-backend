@@ -18,7 +18,9 @@ Internet Request
        ▼
 [ RequestLimitMiddleware ] (Body size cap + request timeout)
        │
-       ├── /health ─────────► [ Host Health Monitor ]
+       ├── / (browser) ─────► [ Statuspage Dashboard (HTML) ]
+       ├── /status ─────────► [ Statuspage Dashboard (HTML) ]
+       ├── /health ─────────► [ Host Health Monitor (JSON) ]
        ├── /semantic/* ─────► [ Mounted Subproject: Semantic-Comment-Analyze ]
        └── /<prefix>/* ─────► [ Future Mounted Services ]
 ```
@@ -149,7 +151,7 @@ The host places `RequestLimitMiddleware` in front of all endpoints:
 
 ## Health and Degradation Model
 
-The root `/health` and `/` endpoints report the aggregate status of all registered projects:
+The `/health` endpoint (and `/` when requested by API clients) reports the aggregate status of all registered projects:
 
 ```json
 {

@@ -66,6 +66,11 @@ Repository secrets for GitHub Actions:
 
 ## Endpoints
 
+### `GET /` and `GET /status`
+Visiting the root `/` in a browser or accessing `/status` renders a status dashboard displaying service readiness beacons, lifespan warmup latencies, active router mounts, and direct route links.
+
+When accessed with `Accept: application/json` or `/?format=json`, the root endpoint returns the raw health JSON structure.
+
 ### `GET /health`
 Returns the status of the host and each registered project:
 
