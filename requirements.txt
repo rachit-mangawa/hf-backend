@@ -120,7 +120,7 @@ scipy==1.17.1
     # via
     #   scikit-learn
     #   sentence-transformers
-semantic-backend @ git+https://github.com/rachit-mangawa/Semantic-Comment-Analyze.git@480d2c3203f4773e805f8f58e63c1f1be315d6d1#subdirectory=backend
+semantic-backend @ git+https://github.com/rachit-mangawa/Semantic-Comment-Analyze.git@eb73c60a2d94fafa9d224d75d1ae8602a0fe372f#subdirectory=backend
     # via -r requirements.in
 sentence-transformers==6.2.0
     # via semantic-backend

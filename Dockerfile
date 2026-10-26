@@ -3,7 +3,7 @@ FROM python:3.11-slim
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    HF_HOME=/tmp/hf \
+    HF_HOME=/home/user/hf-cache \
     PORT=7860
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -u 1000 user && \
-    mkdir -p /tmp/hf /tmp/p2 && \
-    chown -R user:user /tmp/hf /tmp/p2 && \
-    chmod 777 /tmp/hf /tmp/p2
+    mkdir -p /home/user/hf-cache /tmp/p2 && \
+    chown -R user:user /home/user/hf-cache /tmp/p2 && \
+    chmod 777 /tmp/p2
+
 USER user
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH
@@ -34,8 +35,20 @@ RUN --mount=type=secret,id=GITHUB_TOKEN,required=false,uid=1000 \
     pip install --no-cache-dir -r requirements.txt && \
     git config --global --unset-all url."https://${TOKEN}@github.com/".insteadOf 2>/dev/null || true
 
+# Copy registry and prefetch script before app code for optimal layer caching
+COPY --chown=user:user registry.py prefetch.py ./
+
+# Run build-time model prefetch to bake weights into HF_HOME
+RUN --mount=type=secret,id=GITHUB_TOKEN,required=false,uid=1000 \
+    python prefetch.py
+
+# Set offline mode for runtime only
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
+# Copy application code
 COPY --chown=user:user . .
 
 EXPOSE 7860
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]

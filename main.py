@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Callable
 
@@ -16,9 +17,12 @@ logger = logging.getLogger("hf-backend")
 
 loaded_projects: dict[str, str] = {}
 failed_projects: dict[str, str] = {}
+warm_status: dict[str, str] = {}
+total_warmup_seconds: float = 0.0
 
 max_body_size = int(os.getenv("MAX_BODY_SIZE_BYTES", str(10 * 1024 * 1024)))
 request_timeout = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "60.0"))
+default_warmup_timeout = float(os.getenv("WARMUP_TIMEOUT_SECONDS", "300.0"))
 
 
 class RequestLimitMiddleware(BaseHTTPMiddleware):
@@ -52,11 +56,55 @@ class RequestLimitMiddleware(BaseHTTPMiddleware):
             return Response(content="Request Timeout", status_code=504)
 
 
+async def run_warmup_for_project(prefix: str, target: str, timeout: float):
+    logger.info(f"[{prefix}] Checking warmup for target '{target}'...")
+    try:
+        module_name = target.split(":")[0]
+        top_pkg_name = module_name.split(".")[0]
+        pkg = importlib.import_module(top_pkg_name)
+        warmup_fn = getattr(pkg, "warmup", None)
+        if warmup_fn is None or not callable(warmup_fn):
+            logger.info(f"[{prefix}] No callable warmup found on package '{top_pkg_name}'")
+            warm_status[prefix] = "no warmup"
+            return
+
+        logger.info(f"[{prefix}] Starting warmup with timeout {timeout}s...")
+        await asyncio.wait_for(asyncio.to_thread(warmup_fn), timeout=timeout)
+        warm_status[prefix] = "warmed"
+        logger.info(f"[{prefix}] Warmup completed successfully")
+    except asyncio.TimeoutError:
+        msg = f"failed: TimeoutError: warmup timed out after {timeout}s"
+        warm_status[prefix] = msg
+        logger.error(f"[{prefix}] Warmup timed out after {timeout}s")
+    except Exception as e:
+        msg = f"failed: {type(e).__name__}: {str(e)}"
+        warm_status[prefix] = msg
+        logger.error(f"[{prefix}] Warmup failed: {e}", exc_info=True)
+
+
+async def run_all_warmups():
+    global total_warmup_seconds
+    timeout = float(os.getenv("WARMUP_TIMEOUT_SECONDS", str(default_warmup_timeout)))
+    logger.info(f"Lifespan startup: beginning sequential project warmups (timeout={timeout}s)...")
+    t0 = time.perf_counter()
+    for prefix, target in list(loaded_projects.items()):
+        await run_warmup_for_project(prefix, target, timeout=timeout)
+    total_warmup_seconds = round(time.perf_counter() - t0, 3)
+    logger.info(f"Lifespan startup: all warmups finished in {total_warmup_seconds}s")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await run_all_warmups()
+    yield
+
+
 app = FastAPI(
     title="HF Backend",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 
 app.add_middleware(RequestLimitMiddleware, max_size=max_body_size, timeout=request_timeout)
@@ -74,6 +122,10 @@ if allowed_origins:
 
 
 def load_routers():
+    loaded_projects.clear()
+    failed_projects.clear()
+    warm_status.clear()
+
     disabled_raw = [p.strip().strip("/") for p in os.getenv("DISABLE_PROJECTS", "").split(",") if p.strip()]
     disabled_set = {p for p in disabled_raw}
 
@@ -101,7 +153,10 @@ load_routers()
 
 @app.get("/health")
 def health():
-    if not failed_projects:
+    all_mounted = bool(loaded_projects) and len(failed_projects) == 0
+    all_warmed = bool(loaded_projects) and all(warm_status.get(p) == "warmed" for p in loaded_projects)
+
+    if all_mounted and all_warmed:
         overall_status = "healthy"
     elif loaded_projects:
         overall_status = "degraded"
@@ -112,10 +167,11 @@ def health():
         "status": overall_status,
         "loaded": loaded_projects,
         "failed": failed_projects,
+        "warm_status": warm_status,
+        "total_warmup_seconds": total_warmup_seconds,
     }
 
 
 @app.get("/")
 def root():
     return health()
-

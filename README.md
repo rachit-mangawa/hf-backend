@@ -53,6 +53,7 @@ Set these in the Space settings under **Variables and secrets**:
 | `DISABLE_PROJECTS` | No | None | Comma-separated prefixes to skip loading (e.g. `project-2`). |
 | `MAX_BODY_SIZE_BYTES` | No | 10485760 (10 MB) | Max request body size before returning 413. |
 | `REQUEST_TIMEOUT_SECONDS` | No | 60.0 | Request timeout before returning 504. |
+| `WARMUP_TIMEOUT_SECONDS` | No | 300.0 | Warmup timeout per project in worker thread before timing out. |
 | `GITHUB_TOKEN` | Only for private repos | None | GitHub token passed as a build secret to clone private dependencies. |
 
 GitHub repository secrets (used by GitHub Actions):
@@ -71,14 +72,17 @@ Returns the status of the host and each registered project.
 {
   "status": "healthy",
   "loaded": {
-    "/project-1": "heartflow_backend.router:router",
-    "/project-2": "semantic_backend.router:router"
+    "/semantic": "semantic_backend.router:router"
   },
-  "failed": {}
+  "failed": {},
+  "warm_status": {
+    "/semantic": "warmed"
+  },
+  "total_warmup_seconds": 6.35
 }
 ```
 
-If any service fails to load, `status` changes to `"degraded"` or `"unhealthy"` and the error is listed under `"failed"`.
+If any service fails to load or warm up, `status` changes to `"degraded"` or `"unhealthy"` and the error is listed under `"failed"` or `"warm_status"`.
 
 Interactive documentation (`/docs`, `/redoc`, `/openapi.json`) is disabled.
 
