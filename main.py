@@ -133,37 +133,6 @@ if allowed_origins:
     )
 
 
-def load_routers():
-    """Mounts routers dynamically from registry.py with isolated failure handling."""
-    loaded_projects.clear()
-    failed_projects.clear()
-    warm_status.clear()
-
-    disabled_raw = [p.strip().strip("/") for p in os.getenv("DISABLE_PROJECTS", "").split(",") if p.strip()]
-    disabled_set = {p for p in disabled_raw}
-
-    for prefix, target in PROJECT_REGISTRY.items():
-        clean_prefix = prefix.strip("/")
-        if clean_prefix in disabled_set:
-            logger.warning(f"[{prefix}] Skipped: disabled by DISABLE_PROJECTS")
-            continue
-
-        try:
-            logger.info(f"[{prefix}] Importing {target}")
-            module_name, attr_name = target.split(":")
-            module = importlib.import_module(module_name)
-            router = getattr(module, attr_name)
-            app.include_router(router, prefix=prefix)
-            loaded_projects[prefix] = target
-            logger.info(f"[{prefix}] Successfully mounted at {prefix}")
-        except Exception as e:
-            failed_projects[prefix] = f"{type(e).__name__}: {str(e)}"
-            logger.error(f"[{prefix}] Failed to mount router: {e}", exc_info=True)
-
-
-load_routers()
-
-
 @app.get("/health")
 def health():
     any_warmup_failed = any(status.startswith("failed:") for status in warm_status.values())
@@ -197,3 +166,36 @@ def root(request: Request, format: str | None = None):
     if format == "json" or not wants_html:
         return health()
     return HTMLResponse(content=render_statuspage(health()))
+
+
+def load_routers():
+    """Mounts routers dynamically from registry.py with isolated failure handling."""
+    loaded_projects.clear()
+    failed_projects.clear()
+    warm_status.clear()
+
+    disabled_raw = [p.strip().strip("/") for p in os.getenv("DISABLE_PROJECTS", "").split(",") if p.strip()]
+    disabled_set = {p for p in disabled_raw}
+
+    for prefix, target in PROJECT_REGISTRY.items():
+        clean_prefix = prefix.strip("/")
+        if clean_prefix in disabled_set:
+            logger.warning(f"[{prefix}] Skipped: disabled by DISABLE_PROJECTS")
+            continue
+
+        try:
+            logger.info(f"[{prefix}] Importing {target}")
+            module_name, attr_name = target.split(":")
+            module = importlib.import_module(module_name)
+            router = getattr(module, attr_name)
+            app.include_router(router, prefix=prefix)
+            if prefix == "/heartflow":
+                app.include_router(router)
+            loaded_projects[prefix] = target
+            logger.info(f"[{prefix}] Successfully mounted at {prefix}")
+        except Exception as e:
+            failed_projects[prefix] = f"{type(e).__name__}: {str(e)}"
+            logger.error(f"[{prefix}] Failed to mount router: {e}", exc_info=True)
+
+
+load_routers()

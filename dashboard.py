@@ -53,6 +53,15 @@ def render_statuspage(health_data: dict[str, Any]) -> str:
                 '<span class="tag">intent-classifier</span>'
             )
             inspect_link = f'<a href="{prefix}/health" class="link-btn">/semantic/health</a>'
+        elif "heartflow" in prefix:
+            model_tags = (
+                '<span class="tag">RandomForest</span>'
+                '<span class="tag">MLP (Small-NN)</span>'
+                '<span class="tag">LogisticRegression</span>'
+                '<span class="tag">SVM</span>'
+                '<span class="tag">KNN</span>'
+            )
+            inspect_link = f'<a href="{prefix}/health" class="link-btn">/heartflow/health</a>'
         else:
             model_tags = '<span class="tag">Standard Router</span>'
             inspect_link = ""
