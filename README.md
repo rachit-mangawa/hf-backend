@@ -9,64 +9,65 @@ app_port: 7860
 
 # HF Backend
 
-FastAPI host running on a Hugging Face Docker Space. It mounts backend routers from separate project repositories under specific URL prefixes.
+FastAPI gateway running on a Hugging Face Docker Space. The gateway mounts backend routers from standalone project repositories under designated URL prefixes.
 
-## How it works
+For in-depth lifecycle mechanics, prefetch caching, and degradation semantics, see [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/ARCHITECTURE.md).
 
-The host application does not define business logic. Each subproject lives in its own repository, exposes a router in `<package>/router.py`, and is installed as a Python package.
+## How It Works
 
-The host imports each router dynamically from `registry.py` and mounts it under a prefix. If an individual router fails to import, the host logs the error, records the failure, and keeps running for the other services.
+The host application does not contain domain business logic. Each subproject is maintained in its own repository, exposes a router in `<package>/router.py`, and installs as a standard Python package.
+
+The host imports each router from `registry.py` and mounts it under its configured prefix. If a router fails to import, the host logs the error, records the failure, and keeps running for the remaining services.
 
 ```
-/project-1/* -> HEARTFLOW_OS backend router
-/project-2/* -> Semantic Comment Analyzer backend router
-/health      -> Host health status
+/project-1/* -> HEARTFLOW_OS router
+/semantic/*  -> Semantic Comment Analyzer router
+/health      -> Host health and readiness status
 ```
 
-## Adding a project
+## Adding a Service
 
 Adding a new service takes two steps:
 
-1. Add the prefix and router path to `registry.py`:
+1. Register the URL prefix and target router in `registry.py`:
 ```python
 PROJECT_REGISTRY = {
-    "/project-1": "heartflow_backend.router:router",
-    "/project-2": "semantic_backend.router:router",
-    "/project-3": "new_project.router:router",
+    "/semantic": "semantic_backend.router:router",
+    "/new-service": "new_service.router:router",
 }
 ```
 
-2. Add the pinned Git tag to `requirements.txt`:
+2. Pin the Git tag or release in `requirements.in`, then compile `requirements.txt`:
 ```text
-git+https://github.com/<user>/<repo>.git@v1.0#subdirectory=backend
+git+https://github.com/<owner>/<repo>.git@v1.0#subdirectory=backend
 ```
 
-Pushing to `main` syncs the change to Hugging Face and rebuilds the Space container.
+Pushing to `main` deploys the changes to Hugging Face and rebuilds the Space container.
 
 ## Configuration
 
-Set these in the Space settings under **Variables and secrets**:
+Set these variables in the Space settings under **Variables and secrets**:
 
-| Variable | Required | Default | Notes |
+| Variable | Required | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `CORS_ALLOWED_ORIGINS` | No | None | Comma-separated allowed origins. Wildcards (`*`) are ignored. |
-| `DISABLE_PROJECTS` | No | None | Comma-separated prefixes to skip loading (e.g. `project-2`). |
-| `MAX_BODY_SIZE_BYTES` | No | 10485760 (10 MB) | Max request body size before returning 413. |
-| `REQUEST_TIMEOUT_SECONDS` | No | 60.0 | Request timeout before returning 504. |
-| `WARMUP_TIMEOUT_SECONDS` | No | 300.0 | Warmup timeout per project in worker thread before timing out. |
+| `DISABLE_PROJECTS` | No | None | Comma-separated prefixes to skip loading (e.g. `semantic`). |
+| `MAX_BODY_SIZE_BYTES` | No | 10485760 (10 MB) | Maximum request body size before returning HTTP 413. |
+| `REQUEST_TIMEOUT_SECONDS` | No | 60.0 | Request timeout before returning HTTP 504. |
+| `WARMUP_TIMEOUT_SECONDS` | No | 300.0 | Warmup timeout per project during container boot. |
 | `GITHUB_TOKEN` | Only for private repos | None | GitHub token passed as a build secret to clone private dependencies. |
 
-GitHub repository secrets (used by GitHub Actions):
+Repository secrets for GitHub Actions:
 
-| Secret | Notes |
+| Secret | Description |
 | :--- | :--- |
-| `HF_BACKEND_SPACE` | Hugging Face write token used to push code and trigger Space restart. |
-| `HF_SPACE_URL` | Optional. Health URL for the keep-alive workflow. |
+| `HF_BACKEND_SPACE` | Hugging Face token with write permissions to push code and restart the Space. |
+| `HF_SPACE_URL` | Optional health URL for the keep-alive workflow. |
 
 ## Endpoints
 
 ### `GET /health`
-Returns the status of the host and each registered project.
+Returns the status of the host and each registered project:
 
 ```json
 {
@@ -78,17 +79,21 @@ Returns the status of the host and each registered project.
   "warm_status": {
     "/semantic": "warmed"
   },
-  "total_warmup_seconds": 6.35
+  "total_warmup_seconds": 6.48
 }
 ```
 
-If any service fails to load or warm up, `status` changes to `"degraded"` or `"unhealthy"` and the error is listed under `"failed"` or `"warm_status"`.
+Status outcomes:
+- `healthy`: All registered projects mounted successfully and no warmup failed.
+- `degraded`: One or more services failed to mount, or a warmup failed or timed out.
+- `unhealthy`: No services loaded successfully.
 
-Interactive documentation (`/docs`, `/redoc`, `/openapi.json`) is disabled.
+Interactive documentation (`/docs`, `/redoc`, `/openapi.json`) is disabled for production hardening.
 
-## Release workflow
+## Release Workflow
 
-1. Test changes in the project repository using its `dev.py`.
+1. Test changes in the subproject repository.
 2. Tag the release (`git tag v1.0`, `git push origin v1.0`).
-3. Update the tag in this repo's `requirements.txt`.
-4. Push to `main`. The GitHub Actions workflow pushes to Hugging Face and restarts the Space.
+3. Update the tag reference in `requirements.in` and recompile `requirements.txt`.
+4. Run `pytest` locally to verify routing and warmups.
+5. Push to `main`. The GitHub Actions workflow syncs the commit to Hugging Face and triggers a restart.

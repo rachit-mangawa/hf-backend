@@ -1,3 +1,9 @@
+"""Build-time model prefetch script.
+
+Reads project routes from registry.py and invokes warmup() on each
+top-level package to bake weights into the Docker image filesystem.
+"""
+
 import importlib
 import logging
 import sys

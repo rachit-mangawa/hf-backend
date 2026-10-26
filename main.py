@@ -1,3 +1,10 @@
+"""HF Backend Gateway.
+
+Aggregates subproject routers mounted on a Hugging Face Space. Handles
+model warmup during lifespan startup, streaming payload size limits,
+and centralized health tracking.
+"""
+
 import asyncio
 import importlib
 import logging
@@ -5,9 +12,11 @@ import os
 import time
 from contextlib import asynccontextmanager
 from typing import Callable
+
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+
 from registry import PROJECT_REGISTRY
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -24,6 +33,8 @@ default_warmup_timeout = float(os.getenv("WARMUP_TIMEOUT_SECONDS", "300.0"))
 
 
 class RequestLimitMiddleware(BaseHTTPMiddleware):
+    """Enforces incoming request payload limits and execution timeouts."""
+
     def __init__(self, app, max_size: int, timeout: float):
         super().__init__(app)
         self.max_size = max_size
@@ -55,6 +66,7 @@ class RequestLimitMiddleware(BaseHTTPMiddleware):
 
 
 async def run_warmup_for_project(prefix: str, target: str, timeout: float):
+    """Executes a mounted package's warmup function in a worker thread."""
     logger.info(f"[{prefix}] Checking warmup for target '{target}'...")
     try:
         module_name = target.split(":")[0]
@@ -120,6 +132,7 @@ if allowed_origins:
 
 
 def load_routers():
+    """Mounts routers dynamically from registry.py with isolated failure handling."""
     loaded_projects.clear()
     failed_projects.clear()
     warm_status.clear()
