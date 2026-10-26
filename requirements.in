@@ -3,4 +3,4 @@ uvicorn[standard]
 pydantic
 starlette
 git+https://github.com/rachit-mangawa/Semantic-Comment-Analyze.git@v1.3#subdirectory=backend
-git+https://github.com/rachit-mangawa/HEARTFLOW_OS.git@v1.0#subdirectory=backend
+git+https://github.com/rachit-mangawa/HEARTFLOW_OS.git@v1.1#subdirectory=backend

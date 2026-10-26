@@ -41,7 +41,7 @@ h11==0.16.0
     # via
     #   httpcore2
     #   uvicorn
-heartflow-backend @ git+https://github.com/rachit-mangawa/HEARTFLOW_OS.git@c81f1ffadf10f23df2767498230f54b14d39084f#subdirectory=backend
+heartflow-backend @ git+https://github.com/rachit-mangawa/HEARTFLOW_OS.git@d18f43ece78a60dc3ecec4bd57ac0c45c4c083e6#subdirectory=backend
     # via -r requirements.in
 hf-xet==1.7.0
     # via huggingface-hub
