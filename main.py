@@ -5,11 +5,9 @@ import os
 import time
 from contextlib import asynccontextmanager
 from typing import Callable
-
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-
 from registry import PROJECT_REGISTRY
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -153,15 +151,15 @@ load_routers()
 
 @app.get("/health")
 def health():
-    all_mounted = bool(loaded_projects) and len(failed_projects) == 0
-    all_warmed = bool(loaded_projects) and all(warm_status.get(p) == "warmed" for p in loaded_projects)
+    any_warmup_failed = any(status.startswith("failed:") for status in warm_status.values())
+    has_mount_failures = len(failed_projects) > 0
 
-    if all_mounted and all_warmed:
-        overall_status = "healthy"
-    elif loaded_projects:
+    if not loaded_projects:
+        overall_status = "unhealthy"
+    elif has_mount_failures or any_warmup_failed:
         overall_status = "degraded"
     else:
-        overall_status = "unhealthy"
+        overall_status = "healthy"
 
     return {
         "status": overall_status,

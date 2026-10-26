@@ -275,7 +275,7 @@ def test_project_without_warmup(monkeypatch):
         res = client.get("/health")
         assert res.status_code == 200
         data = res.json()
-        assert data["status"] == "degraded"
+        assert data["status"] == "healthy"
         assert data["warm_status"]["/nowarm"] == "no warmup"
         assert client.get("/nowarm/ping").status_code == 200
 
