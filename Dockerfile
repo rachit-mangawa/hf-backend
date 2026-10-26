@@ -12,9 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -u 1000 user && \
-    mkdir -p /home/user/hf-cache /tmp/p2 && \
-    chown -R user:user /home/user/hf-cache /tmp/p2 && \
-    chmod 777 /tmp/p2
+    mkdir -p /home/user/hf-cache /tmp/p1 /tmp/p2 && \
+    chown -R user:user /home/user/hf-cache /tmp/p1 /tmp/p2 && \
+    chmod 777 /tmp/p1 /tmp/p2
 
 USER user
 ENV HOME=/home/user \

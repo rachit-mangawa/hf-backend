@@ -284,8 +284,9 @@ def test_real_registry():
     import importlib
     import registry
     importlib.reload(registry)
-    assert list(registry.PROJECT_REGISTRY.keys()) == ["/semantic"]
+    assert set(registry.PROJECT_REGISTRY.keys()) == {"/semantic", "/heartflow"}
     assert registry.PROJECT_REGISTRY["/semantic"] == "semantic_backend.router:router"
+    assert registry.PROJECT_REGISTRY["/heartflow"] == "heartflow_backend.router:router"
 
     if "main" in sys.modules:
         del sys.modules["main"]
@@ -297,8 +298,10 @@ def test_real_registry():
         data = res.json()
         assert data["status"] == "healthy"
         assert "/semantic" in data["loaded"]
+        assert "/heartflow" in data["loaded"]
         assert not data["failed"]
         assert data["warm_status"]["/semantic"] == "warmed"
+        assert data["warm_status"]["/heartflow"] == "warmed"
         assert data["total_warmup_seconds"] >= 0
 
         res_root = client.get("/")
@@ -314,6 +317,13 @@ def test_real_registry():
         assert sem_data["models_loaded"]["embedding"] is True
         assert sem_data["models_loaded"]["classifier_head"] is True
         assert sem_data["models_loaded"]["sentiment"] is True
+
+        # Check Heartflow /health endpoint reports models_loaded
+        res_hf = client.get("/heartflow/health")
+        assert res_hf.status_code == 200
+        hf_data = res_hf.json()
+        assert hf_data["status"] == "Healthy"
+        assert hf_data["models_loaded"] is True
 
 
 def test_status_page_and_content_negotiation():
@@ -351,3 +361,42 @@ def test_status_page_and_content_negotiation():
         assert "application/json" in res_api.headers.get("content-type", "")
         assert res_api.json()["status"] in ["healthy", "degraded", "unhealthy"]
 
+
+
+def test_host_websocket_through_middleware(monkeypatch):
+    from fastapi import WebSocket
+
+    ws_pkg = types.ModuleType("mock_ws_pkg")
+    ws_router_mod = types.ModuleType("mock_ws_pkg.router")
+    r = APIRouter()
+
+    @r.websocket("/ws")
+    async def dummy_ws(websocket: WebSocket):
+        await websocket.accept()
+        for i in range(3):
+            await websocket.send_text(f"frame-{i}")
+        await websocket.close()
+
+    ws_router_mod.router = r
+    ws_pkg.router = ws_router_mod
+    ws_pkg.warmup = lambda: True
+    sys.modules["mock_ws_pkg"] = ws_pkg
+    sys.modules["mock_ws_pkg.router"] = ws_router_mod
+
+    monkeypatch.setenv("DISABLE_PROJECTS", "")
+    monkeypatch.setenv("MAX_BODY_SIZE_BYTES", "1024")
+    monkeypatch.setenv("REQUEST_TIMEOUT_SECONDS", "5.0")
+
+    import registry
+    registry.PROJECT_REGISTRY = {
+        "/mockws": "mock_ws_pkg.router:router",
+    }
+
+    if "main" in sys.modules:
+        del sys.modules["main"]
+
+    import main
+    with TestClient(main.app) as client:
+        with client.websocket_connect("/mockws/ws") as ws:
+            frames = [ws.receive_text() for _ in range(3)]
+            assert frames == ["frame-0", "frame-1", "frame-2"]
