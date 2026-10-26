@@ -1,8 +1,8 @@
 ---
 title: HF Backend
 emoji: ⚡
-colorFrom: purple
-colorTo: indigo
+colorFrom: gray
+colorTo: pink
 sdk: docker
 app_port: 7860
 ---
