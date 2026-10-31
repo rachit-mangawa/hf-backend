@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Callable
+from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -170,6 +170,38 @@ if allowed_origins:
     )
 
 
+def get_routes_summary() -> dict[str, list[dict[str, Any]]]:
+    """Inspects FastAPI mounted routes and groups them dynamically by service prefix."""
+    routes_by_prefix: dict[str, list[dict[str, Any]]] = {}
+    for r in app.routes:
+        path = getattr(r, "path", "")
+        methods = sorted(list(getattr(r, "methods", [])))
+        clean_methods = [m for m in methods if m not in ("HEAD", "OPTIONS")]
+        for prefix in loaded_projects:
+            if path.startswith(prefix):
+                routes_by_prefix.setdefault(prefix, []).append({
+                    "path": path,
+                    "methods": clean_methods or ["GET"],
+                    "name": getattr(r, "name", ""),
+                    "summary": getattr(r, "summary", "") or getattr(r, "description", "") or "",
+                })
+                break
+    return routes_by_prefix
+
+
+def get_gateway_info() -> dict[str, Any]:
+    """Returns runtime configuration for the developer status console."""
+    return {
+        "max_body_size_bytes": max_body_size,
+        "request_timeout_seconds": request_timeout,
+        "warmup_timeout_seconds": default_warmup_timeout,
+        "docs_url": docs_url,
+        "openapi_url": openapi_url,
+        "enable_docs": enable_docs,
+        "allowed_origins": allowed_origins,
+    }
+
+
 @app.get("/health", tags=["Host Gateway"])
 def health():
     any_warmup_failed = any(status.startswith("failed:") for status in warm_status.values())
@@ -193,7 +225,13 @@ def health():
 
 @app.get("/status", response_class=HTMLResponse, tags=["Host Gateway"])
 def status_page():
-    return HTMLResponse(content=render_statuspage(health()))
+    return HTMLResponse(
+        content=render_statuspage(
+            health(),
+            gateway_info=get_gateway_info(),
+            routes_info=get_routes_summary(),
+        )
+    )
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -207,7 +245,13 @@ def root(request: Request, format: str | None = None):
     wants_html = format == "html" or ("text/html" in accept and not accept.startswith("*/*"))
     if format == "json" or not wants_html:
         return health()
-    return HTMLResponse(content=render_statuspage(health()))
+    return HTMLResponse(
+        content=render_statuspage(
+            health(),
+            gateway_info=get_gateway_info(),
+            routes_info=get_routes_summary(),
+        )
+    )
 
 
 def load_routers():

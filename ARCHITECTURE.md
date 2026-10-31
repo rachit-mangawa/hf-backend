@@ -1,12 +1,12 @@
 # Architecture Guide
 
-Technical design, container lifecycle, and service contracts for `hf-backend`.
+Technical design, container lifecycle, and integration contracts for `hf-backend`.
 
 ---
 
 ## System overview
 
-`hf-backend` is an aggregation gateway running in a Hugging Face Docker Space. It mounts routers from separate repositories under dedicated URL prefixes.
+`hf-backend` is an aggregation gateway hosted in a Hugging Face Docker Space. It mounts independent Python package routers under dedicated URL prefixes, providing shared networking, security, documentation, and telemetry infrastructure.
 
 ```
 Incoming Request
@@ -18,24 +18,24 @@ Incoming Request
 [ Uvicorn Worker ] (:7860)
        │
        ▼
-[ SecurityHeadersMiddleware ] (HSTS, nosniff, frame-ancestors)
+[ SecurityHeadersMiddleware ] (HSTS, nosniff, frame-ancestors CSP)
        │
        ▼
 [ RequestLimitMiddleware ] (Body size cap + request execution timeout)
        │
-       ├── /project ────────► [ Interactive Swagger UI ]
-       ├── / (browser) ─────► [ Status Dashboard (HTML) ]
-       ├── /status ─────────► [ Status Dashboard (HTML) ]
+       ├── /project ────────► [ Interactive Swagger UI (OpenAPI 3.1) ]
+       ├── /status ─────────► [ Developer Console (HTML) ]
        ├── /health ─────────► [ Aggregated Health Monitor (JSON) ]
-       ├── /heartflow/* ────► [ Mounted Subproject: HeartFlow OS ]
-       ├── /semantic/* ─────► [ Mounted Subproject: Semantic Comment Analyzer ]
-       └── /<prefix>/* ─────► [ Dynamically Mounted Future Services ]
+       │
+       ├── /<prefix-a>/* ───► [ Subproject A Router (e.g. /heartflow) ]
+       ├── /<prefix-b>/* ───► [ Subproject B Router (e.g. /semantic) ]
+       └── /<prefix-n>/* ───► [ Dynamically Mounted Future Subprojects ]
 ```
 
-The gateway handles shared infrastructure tasks:
+The gateway handles shared host responsibilities:
 * Dynamic discovery and isolated mounting of external service packages.
-* Inbound payload verification before memory buffering.
-* Global request timeouts to prevent worker starvation.
+* Inbound payload verification before buffering data into memory.
+* Global request timeouts to avoid thread starvation.
 * Zero-cold-start inference by baking weights at build time and warming them up at boot.
 * Centralized health tracking reflecting route mounting and model readiness.
 
@@ -45,7 +45,7 @@ The gateway handles shared infrastructure tasks:
 
 Restarting an ML container typically introduces two delays: downloading weights over the network, and compiling or loading model tensors into memory on the first user request.
 
-`hf-backend` eliminates both delays with a two-phase build and boot workflow:
+`hf-backend` avoids both delays with a two-phase build and boot workflow:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -95,17 +95,17 @@ Restarting an ML container typically introduces two delays: downloading weights 
 
 ### Build caching strategy
 
-The Dockerfile separates dependency installation from code copying:
+The Dockerfile separates dependency installation from application code:
 1. `requirements.txt` installs first.
 2. `registry.py` and `prefetch.py` are copied, and `prefetch.py` runs. Model weights are saved inside `/home/user/hf-cache`.
-3. `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` are set, disabling runtime network calls to the Hub.
+3. `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` are set, disabling runtime network calls to the Hugging Face Hub.
 4. Application code (`main.py`, `dashboard.py`, tests) is copied last.
 
-When you update gateway routing or edit documentation, Docker reuses the cached model layers. The Space rebuilds and restarts in seconds rather than redownloading multi-gigabyte checkpoints.
+When you update gateway routing or documentation, Docker reuses the cached model layers. The Space rebuilds and restarts in seconds rather than redownloading multi-gigabyte checkpoints.
 
 ---
 
-## Service contracts
+## Subproject contracts
 
 Every subproject mounted into `hf-backend` follows two standard conventions.
 
@@ -113,29 +113,31 @@ Every subproject mounted into `hf-backend` follows two standard conventions.
 A subproject must be installable as a Python package (pinned by Git tag in `requirements.in`) and export a FastAPI `APIRouter` instance:
 
 ```python
-# target: "semantic_backend.router:router"
+# target: "my_package.router:router"
 from fastapi import APIRouter
 
 router = APIRouter()
 
 @router.get("/health")
-def project_health():
+def service_health():
     return {"status": "healthy"}
 ```
 
-### 2. Startup warmup function
+The gateway imports the router via setuptools entrypoint notation (`<module_path>:<attribute_name>`) and mounts it using `app.include_router(router, prefix=prefix)`.
+
+### 2. Startup warmup function (optional)
 If the top-level package defines a callable named `warmup()`, the gateway lifespan executes it during container boot:
 
 ```python
-# semantic_backend/__init__.py
+# my_package/__init__.py
 def warmup():
-    from .nlp_engine import warmup as _warmup
-    return _warmup()
+    from .model_engine import load_weights
+    load_weights()
 ```
 
 Warmup conventions:
 * Loads lazy model checkpoints (tokenizers, classification heads, neural nets).
-* Runs a synthetic inference pass to prime memory and execution graphs.
+* Runs a synthetic inference pass to compile compute graphs and prime memory.
 * Runs synchronously; the gateway wraps it in `asyncio.to_thread`.
 * If a package omits `warmup()`, the gateway marks it as `"no warmup"` and proceeds normally.
 
@@ -158,9 +160,20 @@ Request ──► [ SecurityHeadersMiddleware ]
             [ Subproject Router ]
 ```
 
-1. `SecurityHeadersMiddleware`: Sets nosniff, Referrer-Policy, and a frame-ancestors CSP directive so Hugging Face Spaces can embed the UI without exposing it to third-party clickjacking. Adds HSTS on HTTPS requests.
-2. `RequestLimitMiddleware`: Fast-fails requests larger than `MAX_BODY_SIZE_BYTES` using the `Content-Length` header (returning 413) or rejects unparseable headers (returning 400). On chunked or streaming requests, it tallies bytes on arrival and raises 413 if the limit is exceeded. Downstream handler execution is wrapped in `asyncio.wait_for`, returning 504 if a task exceeds `REQUEST_TIMEOUT_SECONDS`.
-3. `CORSMiddleware`: Handles browser preflight checks against configured origins.
+1. **`SecurityHeadersMiddleware`**:
+   * Sets `X-Content-Type-Options: nosniff` to block MIME sniffing.
+   * Sets `X-XSS-Protection: 0` to disable problematic legacy browser filters.
+   * Sets `Referrer-Policy: strict-origin-when-cross-origin`.
+   * Sets `Content-Security-Policy: frame-ancestors 'self' https://huggingface.co https://*.hf.space;` allowing the Hugging Face Space UI to embed the service while blocking third-party clickjacking.
+   * Injects `Strict-Transport-Security` on HTTPS connections.
+
+2. **`RequestLimitMiddleware`**:
+   * Inspects `Content-Length` headers immediately, returning HTTP 413 before large payloads enter application memory. Rejects malformed headers with HTTP 400.
+   * On chunked or streaming requests, it counts incoming bytes and aborts with HTTP 413 if the total exceeds `MAX_BODY_SIZE_BYTES`.
+   * Wraps downstream request processing in `asyncio.wait_for`, returning HTTP 504 if execution exceeds `REQUEST_TIMEOUT_SECONDS`.
+
+3. **`CORSMiddleware`**:
+   * Handles browser preflight checks against configured allowed origins.
 
 ---
 
@@ -194,4 +207,18 @@ The `/health` endpoint reports the aggregated status of the host and each mounte
 
 * A project without a `warmup()` reports `"no warmup"` and remains `healthy`.
 * If a warmup throws an exception or exceeds `WARMUP_TIMEOUT_SECONDS`, the gateway records `"failed: <reason>"` in `warm_status` and logs the traceback.
-* Individual subproject failures are isolated; one broken dependency will not crash the host or prevent healthy services from serving traffic.
+* Individual subproject failures are isolated; a broken dependency in one subproject will not crash the host or prevent healthy services from serving traffic.
+
+---
+
+## Developer console & route introspection
+
+The `/status` endpoint renders an interactive developer console. It dynamically introspects `app.routes` at runtime to group endpoints under their mounted prefixes.
+
+Features:
+* **Live latency counter**: Measures round-trip ping time to `/health` with an auto-refresh toggle (10s polling interval) and manual reload control.
+* **Route explorer**: Displays HTTP method pills (`GET`, `POST`, `WS`), endpoint paths, one-click cURL generator, and direct links to Swagger UI.
+* **Instant search**: Keyboard-driven filter (`/`) to search across services and paths instantly.
+* **Gateway specifications**: Shows active payload caps, execution timeouts, docs paths, and CORS origins.
+* **Raw JSON inspector**: Formatted view of the `/health` response with a copy-to-clipboard button.
+* **Zero external CDN dependencies**: Uses inline CSS and vanilla JavaScript, ensuring functionality offline and under strict Content Security Policies.
