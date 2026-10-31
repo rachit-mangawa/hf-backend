@@ -1,8 +1,4 @@
-"""FastAPI gateway for subproject routers on Hugging Face Spaces.
-
-Mounts external routers, runs startup model warmups, enforces request limits
-and security headers, and serves health status.
-"""
+"""FastAPI gateway for subproject routers on Hugging Face Spaces."""
 
 import asyncio
 import importlib
@@ -34,7 +30,7 @@ default_warmup_timeout = float(os.getenv("WARMUP_TIMEOUT_SECONDS", "300.0"))
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Sets security headers and allows Hugging Face Space framing."""
+    """Sets standard security headers and allows Hugging Face Space framing."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         response: Response = await call_next(request)
@@ -50,7 +46,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class RequestLimitMiddleware(BaseHTTPMiddleware):
-    """Enforces request payload limits and execution timeouts."""
+    """Enforces request payload size limits and execution timeouts."""
 
     def __init__(self, app, max_size: int, timeout: float):
         super().__init__(app)
@@ -140,7 +136,7 @@ openapi_url = os.getenv("OPENAPI_URL", "/openapi.json") if enable_docs else None
 
 app = FastAPI(
     title="HF Backend Gateway",
-    description="API gateway for HeartFlow OS and Semantic Comment Analyzer.",
+    description="Pluggable aggregation gateway for independent Python microservices.",
     version="1.0.0",
     docs_url=docs_url,
     redoc_url=None,
@@ -171,17 +167,16 @@ if allowed_origins:
 
 
 def get_routes_summary() -> dict[str, list[dict[str, Any]]]:
-    """Inspects FastAPI mounted routes and groups them dynamically by service prefix."""
+    """Inspects mounted routes and groups them by service prefix."""
     routes_by_prefix: dict[str, list[dict[str, Any]]] = {}
     for r in app.routes:
         path = getattr(r, "path", "")
-        methods = sorted(list(getattr(r, "methods", [])))
-        clean_methods = [m for m in methods if m not in ("HEAD", "OPTIONS")]
+        methods = [m for m in getattr(r, "methods", []) if m not in ("HEAD", "OPTIONS")]
         for prefix in loaded_projects:
             if path.startswith(prefix):
                 routes_by_prefix.setdefault(prefix, []).append({
                     "path": path,
-                    "methods": clean_methods or ["GET"],
+                    "methods": sorted(methods) or ["GET"],
                     "name": getattr(r, "name", ""),
                     "summary": getattr(r, "summary", "") or getattr(r, "description", "") or "",
                 })
@@ -205,11 +200,9 @@ def get_gateway_info() -> dict[str, Any]:
 @app.get("/health", tags=["Host Gateway"])
 def health():
     any_warmup_failed = any(status.startswith("failed:") for status in warm_status.values())
-    has_mount_failures = len(failed_projects) > 0
-
     if not loaded_projects:
         overall_status = "unhealthy"
-    elif has_mount_failures or any_warmup_failed:
+    elif failed_projects or any_warmup_failed:
         overall_status = "degraded"
     else:
         overall_status = "healthy"
@@ -261,7 +254,7 @@ def load_routers():
     warm_status.clear()
 
     disabled_raw = [p.strip().strip("/") for p in os.getenv("DISABLE_PROJECTS", "").split(",") if p.strip()]
-    disabled_set = {p for p in disabled_raw}
+    disabled_set = set(disabled_raw)
 
     for prefix, target in PROJECT_REGISTRY.items():
         clean_prefix = prefix.strip("/")
@@ -274,7 +267,14 @@ def load_routers():
             module_name, attr_name = target.split(":")
             module = importlib.import_module(module_name)
             router = getattr(module, attr_name)
-            tag = "Semantic Comment Analyzer" if "semantic" in prefix else ("HeartFlow OS" if "heartflow" in prefix else prefix.strip("/").title())
+
+            if "semantic" in prefix:
+                tag = "Semantic Comment Analyzer"
+            elif "heartflow" in prefix:
+                tag = "HeartFlow OS"
+            else:
+                tag = prefix.strip("/").replace("-", " ").replace("_", " ").title()
+
             app.include_router(router, prefix=prefix, tags=[tag])
             if prefix == "/heartflow":
                 app.include_router(router, include_in_schema=False)

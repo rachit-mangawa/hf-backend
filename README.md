@@ -7,13 +7,13 @@ sdk: docker
 app_port: 7860
 ---
 
-# HF Backend — Pluggable API Gateway
+# HF Backend: Pluggable API Gateway
 
-A generic aggregation gateway designed to host, serve, and monitor multiple independent Python subprojects within a single container on Hugging Face Spaces.
+An aggregation gateway that hosts and monitors multiple Python subprojects within a single container on Hugging Face Spaces.
 
-Rather than maintaining separate Spaces for individual microservices or machine learning models, this gateway aggregates standalone package routers under dedicated URL prefixes. It provides shared infrastructure: build-time model prefetching, lifespan memory warmups, streaming payload guards, web security headers, unified Swagger UI documentation, and real-time health telemetry.
+The gateway mounts standalone package routers under dedicated URL prefixes, providing shared infrastructure: build-time model prefetching, memory warmups at boot, streaming payload guards, security headers, unified Swagger UI documentation, and health telemetry.
 
-Read [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/ARCHITECTURE.md) for architectural specifications, build caching mechanics, and subproject integration contracts.
+Read [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/ARCHITECTURE.md) for technical specifications, build caching mechanics, and subproject integration contracts.
 
 ---
 
@@ -21,10 +21,10 @@ Read [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-
 
 | Resource | Path | Description |
 | :--- | :--- | :--- |
-| **Interactive API docs** | [`/project`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L112) | Swagger UI documenting all mounted subproject routes |
-| **Developer console** | [`/status`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L189) | Real-time status console with endpoint explorer and cURL snippets |
-| **Health endpoint** | [`/health`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L168) | Machine-readable JSON health and readiness payload |
-| **OpenAPI schema** | `/openapi.json` | OpenAPI 3.1 specification |
+| Interactive API docs | [`/project`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L112) | Swagger UI documenting all mounted subproject routes |
+| Developer console | [`/status`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L189) | Real-time status console with endpoint explorer and cURL snippets |
+| Health endpoint | [`/health`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L168) | Machine-readable JSON health and readiness payload |
+| OpenAPI schema | `/openapi.json` | OpenAPI 3.1 specification |
 
 ---
 
@@ -32,25 +32,18 @@ Read [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-
 
 The gateway maintains no domain-specific business logic. Each subproject is maintained in its own repository, installs as a standard Python package, and exports a FastAPI `APIRouter`.
 
-```
-Client Request
-      │
-      ▼
-[ SecurityHeadersMiddleware ] (HSTS, nosniff, frame-ancestors CSP)
-      │
-      ▼
-[ RequestLimitMiddleware ] (Streaming byte check + execution timeout)
-      │
-      ▼
-[ Gateway Dispatcher ]
-      │
-      ├── /project ────────► Interactive Swagger UI (OpenAPI 3.1)
-      ├── /status ─────────► Developer Console & Route Explorer
-      ├── /health ─────────► Aggregated Health Monitor (JSON)
-      │
-      ├── /<prefix-a>/* ───► Mounted Package A Router
-      ├── /<prefix-b>/* ───► Mounted Package B Router
-      └── /<prefix-n>/* ───► Dynamically Mounted Future Subprojects
+```mermaid
+flowchart TD
+    Client["Client Request"] --> Sec["SecurityHeadersMiddleware<br/>(HSTS, nosniff, frame-ancestors CSP)"]
+    Sec --> Limit["RequestLimitMiddleware<br/>(Payload byte counter & timeout)"]
+    Limit --> Router{"Gateway Router"}
+
+    Router --> Docs["/project (Swagger UI)"]
+    Router --> Status["/status (Developer Console)"]
+    Router --> Health["/health (JSON Monitor)"]
+    Router --> SubA["/<prefix-a>/* (Subproject A)"]
+    Router --> SubB["/<prefix-b>/* (Subproject B)"]
+    Router --> SubN["/<prefix-n>/* (Dynamic Subprojects)"]
 ```
 
 If any registered service fails to import or encounters an error during startup warmup, the gateway records the error, marks overall health as `degraded`, and continues serving all other healthy subprojects without interruption.
@@ -80,10 +73,10 @@ Add the package source (git tag, PyPI release, or wheel URL) to `requirements.in
 git+https://github.com/<owner>/<repo>.git@v1.0#subdirectory=backend
 ```
 
-Compile `requirements.txt` using `pip-compile`:
+Compile `requirements.txt` using `uv` or `pip-compile`:
 
 ```bash
-pip-compile requirements.in -o requirements.txt
+uv pip compile requirements.in -o requirements.txt --python-version 3.11 --python-platform linux --extra-index-url https://download.pytorch.org/whl/cpu --emit-index-url
 ```
 
 When changes land on `main`, the build pipeline installs the dependency, prefetches any model checkpoints declared in its `warmup()` function, and hot-mounts the router.
@@ -155,25 +148,25 @@ Configure these settings in the Hugging Face Space under **Settings > Variables 
 ## Developer console & telemetry
 
 Visiting the root `/` or `/status` renders the developer console. It dynamically queries the gateway state and exposes:
-* **Live Health Telemetry**: Live ping latency counter with auto-refresh (10s polling interval) and manual refresh control.
-* **Dynamic Route Explorer**: Automatically lists every mounted path, HTTP method badge (`GET`, `POST`, `WS`), and one-click cURL snippet generator.
-* **Route Filter**: Instant keyboard-driven search (`/`) across all registered prefixes and endpoint paths.
-* **Gateway Specifications**: Live view of active security headers, frame-ancestor policies, and stream metering limits.
-* **Raw JSON Inspector**: Formatted view of the `/health` payload with one-click copy.
+* Live ping latency meter with a manual refresh control and a 10-second auto-poll toggle.
+* Dynamic route explorer listing mounted paths, HTTP method badges (`GET`, `POST`, `WS`), and one-click cURL snippet generators.
+* Keyboard-driven route search (`/`) across all registered prefixes and endpoint paths.
+* Gateway configuration summary detailing active security headers and stream metering limits.
+* Formatted view of the `/health` payload with one-click copy.
 
 ---
 
 ## Security controls
 
-* **Security headers**: Injected by `SecurityHeadersMiddleware` on every response:
-  * `X-Content-Type-Options: nosniff` (mitigates MIME-sniffing exploits).
-  * `X-XSS-Protection: 0` (disables legacy buggy browser XSS auditors).
-  * `Referrer-Policy: strict-origin-when-cross-origin` (protects referrer context).
-  * `Content-Security-Policy: frame-ancestors 'self' https://huggingface.co https://*.hf.space;` (permits Hugging Face Space iframe embedding while preventing third-party clickjacking).
-  * `Strict-Transport-Security` (injected automatically when accessed over HTTPS).
-* **Early size validation**: Inspects `Content-Length` headers immediately, returning HTTP 413 before large payloads enter application memory. Rejects malformed headers with HTTP 400.
-* **Chunk stream metering**: Counts arriving bytes on unbuffered streams to catch oversized uploads that omit `Content-Length`.
-* **Worker protection**: Downstream route execution is bounded by an `asyncio` timeout so hung tasks do not exhaust server workers.
+* Security headers applied by `SecurityHeadersMiddleware` on every response:
+  * `X-Content-Type-Options: nosniff` to prevent MIME-sniffing exploits.
+  * `X-XSS-Protection: 0` to disable problematic legacy browser XSS filters.
+  * `Referrer-Policy: strict-origin-when-cross-origin` to protect referrer context.
+  * `Content-Security-Policy: frame-ancestors 'self' https://huggingface.co https://*.hf.space;` allowing the Hugging Face Space UI to embed the page while blocking third-party clickjacking.
+  * `Strict-Transport-Security` added automatically on HTTPS connections.
+* Early size validation inspects `Content-Length` headers immediately, returning HTTP 413 before large payloads enter application memory, and rejects malformed headers with HTTP 400.
+* Chunk stream metering counts arriving bytes on unbuffered streams to catch oversized uploads that omit `Content-Length`.
+* Worker protection wraps downstream route execution in an `asyncio` timeout so hung tasks do not exhaust server workers.
 
 ---
 

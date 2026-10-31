@@ -8,28 +8,20 @@ Technical design, container lifecycle, and integration contracts for `hf-backend
 
 `hf-backend` is an aggregation gateway hosted in a Hugging Face Docker Space. It mounts independent Python package routers under dedicated URL prefixes, providing shared networking, security, documentation, and telemetry infrastructure.
 
-```
-Incoming Request
-       │
-       ▼
-[ Hugging Face Edge Proxy ] (:443)
-       │
-       ▼
-[ Uvicorn Worker ] (:7860)
-       │
-       ▼
-[ SecurityHeadersMiddleware ] (HSTS, nosniff, frame-ancestors CSP)
-       │
-       ▼
-[ RequestLimitMiddleware ] (Body size cap + request execution timeout)
-       │
-       ├── /project ────────► [ Interactive Swagger UI (OpenAPI 3.1) ]
-       ├── /status ─────────► [ Developer Console (HTML) ]
-       ├── /health ─────────► [ Aggregated Health Monitor (JSON) ]
-       │
-       ├── /<prefix-a>/* ───► [ Subproject A Router (e.g. /heartflow) ]
-       ├── /<prefix-b>/* ───► [ Subproject B Router (e.g. /semantic) ]
-       └── /<prefix-n>/* ───► [ Dynamically Mounted Future Subprojects ]
+```mermaid
+flowchart TD
+    Req["Incoming HTTPS Request"] --> Edge["Hugging Face Edge Proxy (:443)"]
+    Edge --> Uvicorn["Uvicorn Worker (:7860)"]
+    Uvicorn --> Sec["SecurityHeadersMiddleware<br/>(CSP, nosniff, HSTS)"]
+    Sec --> Limit["RequestLimitMiddleware<br/>(Body cap & execution timeout)"]
+    Limit --> Core{"Gateway Dispatcher"}
+
+    Core --> Docs["/project (Swagger UI)"]
+    Core --> Status["/status (Developer Console)"]
+    Core --> Health["/health (JSON Health)"]
+    Core --> ServA["/<prefix-a>/* (e.g. /heartflow)"]
+    Core --> ServB["/<prefix-b>/* (e.g. /semantic)"]
+    Core --> ServN["/<prefix-n>/* (Dynamic Subprojects)"]
 ```
 
 The gateway handles shared host responsibilities:
@@ -47,50 +39,28 @@ Restarting an ML container typically introduces two delays: downloading weights 
 
 `hf-backend` avoids both delays with a two-phase build and boot workflow:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ 1. DOCKER BUILD TIME (BuildKit)                             │
-│                                                             │
-│  pip install requirements.txt                               │
-│        │                                                    │
-│  COPY registry.py prefetch.py                               │
-│        │                                                    │
-│  RUN python prefetch.py                                     │
-│        ├─► Imports registered packages                      │
-│        ├─► Dispatches warmup()                              │
-│        └─► Weights download into /home/user/hf-cache        │
-│        │                                                    │
-│  ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1                │
-│        │                                                    │
-│  COPY . . (Code changes do not invalidate model cache)      │
-└─────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 2. CONTAINER STARTUP (FastAPI Lifespan)                     │
-│                                                             │
-│  Uvicorn starts process [1]                                 │
-│        │                                                    │
-│  load_routers() mounts endpoints from registry.py           │
-│        │                                                    │
-│  Lifespan executes:                                         │
-│        ├─► Iterates over loaded projects                    │
-│        ├─► Calls warmup() in a background worker thread     │
-│        └─► Enforces WARMUP_TIMEOUT_SECONDS per project      │
-│        │                                                    │
-│  All models loaded into RAM / dummy inferences complete     │
-│        │                                                    │
-│  Uvicorn opens port 7860 and accepts incoming requests      │
-└─────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 3. SERVING RUNTIME                                          │
-│                                                             │
-│  First incoming inference request                           │
-│        └─► Weights already resident in memory               │
-│        └─► Initial response latency < 100 ms                │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Build["Phase 1: Docker Build (BuildKit)"]
+        B1["Install requirements.txt"] --> B2["Copy registry.py and prefetch.py"]
+        B2 --> B3["Execute python prefetch.py"]
+        B3 --> B4["Download model checkpoints to /home/user/hf-cache"]
+        B4 --> B5["Set HF_HUB_OFFLINE=1 & TRANSFORMERS_OFFLINE=1"]
+        B5 --> B6["Copy application code (layer cache preserved)"]
+    end
+
+    subgraph Startup["Phase 2: Container Boot (FastAPI Lifespan)"]
+        S1["Uvicorn process starts"] --> S2["load_routers() dynamically mounts endpoints"]
+        S2 --> S3["Sequential project warmup runs in worker thread"]
+        S3 --> S4["Load models into RAM / execute warm passes"]
+        S4 --> S5["Uvicorn opens port 7860 to receive traffic"]
+    end
+
+    subgraph Serving["Phase 3: Runtime Serving"]
+        R1["First incoming user request"] --> R2["Tensors already resident: latency < 100ms"]
+    end
+
+    Build --> Startup --> Serving
 ```
 
 ### Build caching strategy
@@ -147,32 +117,30 @@ Warmup conventions:
 
 Incoming requests traverse three layers of middleware before reaching subproject routers:
 
-```
-Request ──► [ SecurityHeadersMiddleware ]
-                 │
-                 ▼
-            [ RequestLimitMiddleware ] ──(Exceeds limit)──► 413 Payload Too Large
-                 │                     ──(Timeout)──────► 504 Gateway Timeout
-                 ▼
-            [ CORSMiddleware ]
-                 │
-                 ▼
-            [ Subproject Router ]
+```mermaid
+flowchart TD
+    Req["Inbound Request"] --> Sec["SecurityHeadersMiddleware<br/>(nosniff, CSP, HSTS)"]
+    Sec --> Limit["RequestLimitMiddleware"]
+
+    Limit -- "Body > 10 MB" --> E413["HTTP 413 Payload Too Large"]
+    Limit -- "Duration > 60s" --> E504["HTTP 504 Gateway Timeout"]
+    Limit -- "Within limits" --> CORS["CORSMiddleware"]
+    CORS --> Router["Subproject Router"]
 ```
 
-1. **`SecurityHeadersMiddleware`**:
+1. `SecurityHeadersMiddleware`:
    * Sets `X-Content-Type-Options: nosniff` to block MIME sniffing.
    * Sets `X-XSS-Protection: 0` to disable problematic legacy browser filters.
    * Sets `Referrer-Policy: strict-origin-when-cross-origin`.
    * Sets `Content-Security-Policy: frame-ancestors 'self' https://huggingface.co https://*.hf.space;` allowing the Hugging Face Space UI to embed the service while blocking third-party clickjacking.
    * Injects `Strict-Transport-Security` on HTTPS connections.
 
-2. **`RequestLimitMiddleware`**:
+2. `RequestLimitMiddleware`:
    * Inspects `Content-Length` headers immediately, returning HTTP 413 before large payloads enter application memory. Rejects malformed headers with HTTP 400.
    * On chunked or streaming requests, it counts incoming bytes and aborts with HTTP 413 if the total exceeds `MAX_BODY_SIZE_BYTES`.
    * Wraps downstream request processing in `asyncio.wait_for`, returning HTTP 504 if execution exceeds `REQUEST_TIMEOUT_SECONDS`.
 
-3. **`CORSMiddleware`**:
+3. `CORSMiddleware`:
    * Handles browser preflight checks against configured allowed origins.
 
 ---
@@ -216,9 +184,9 @@ The `/health` endpoint reports the aggregated status of the host and each mounte
 The `/status` endpoint renders an interactive developer console. It dynamically introspects `app.routes` at runtime to group endpoints under their mounted prefixes.
 
 Features:
-* **Live latency counter**: Measures round-trip ping time to `/health` with an auto-refresh toggle (10s polling interval) and manual reload control.
-* **Route explorer**: Displays HTTP method pills (`GET`, `POST`, `WS`), endpoint paths, one-click cURL generator, and direct links to Swagger UI.
-* **Instant search**: Keyboard-driven filter (`/`) to search across services and paths instantly.
-* **Gateway specifications**: Shows active payload caps, execution timeouts, docs paths, and CORS origins.
-* **Raw JSON inspector**: Formatted view of the `/health` response with a copy-to-clipboard button.
-* **Zero external CDN dependencies**: Uses inline CSS and vanilla JavaScript, ensuring functionality offline and under strict Content Security Policies.
+* Live latency counter measuring round-trip ping time to `/health`, with manual and 10-second polling.
+* Route explorer displaying HTTP method pills (`GET`, `POST`, `WS`), endpoint paths, one-click cURL generator, and direct links to Swagger UI.
+* Instant search filter (`/`) to find services and routes across all prefixes.
+* Gateway specifications detailing active payload caps, execution timeouts, docs paths, and CORS origins.
+* Raw JSON inspector displaying formatted `/health` telemetry with one-click copy.
+* Zero external CDN dependencies, using inline CSS and vanilla JavaScript for full offline and strict CSP compatibility.

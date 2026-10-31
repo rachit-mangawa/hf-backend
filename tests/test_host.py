@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import types
+
 import pytest
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
@@ -385,7 +386,6 @@ def test_status_page_and_content_negotiation():
         assert res_api.status_code == 200
         assert "application/json" in res_api.headers.get("content-type", "")
         assert res_api.json()["status"] in ["healthy", "degraded", "unhealthy"]
-
 
 
 def test_host_websocket_through_middleware(monkeypatch):

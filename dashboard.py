@@ -1,10 +1,4 @@
-"""Developer Console and Status Dashboard renderer for HF Backend Gateway.
-
-Renders system telemetry, registered service cards, dynamic endpoint explorers,
-and real-time health monitors with a modern, high-craft developer interface.
-Completely generic: dynamically inspects any registered routers and endpoints
-without hardcoded project names.
-"""
+"""Status dashboard and developer console renderer."""
 
 import html
 import json
@@ -29,25 +23,13 @@ def render_statuspage(
     timeout_s = round(gateway_cfg.get("request_timeout_seconds", 60.0), 1)
     docs_url = gateway_cfg.get("docs_url", "/project")
 
-    # Status badge config
-    if status == "healthy":
-        status_label = "All Systems Operational"
-        status_color = "#10b981"
-        status_bg = "rgba(16, 185, 129, 0.1)"
-        status_border = "rgba(16, 185, 129, 0.25)"
-        status_dot = "#10b981"
-    elif status == "degraded":
-        status_label = "System Degraded"
-        status_color = "#f59e0b"
-        status_bg = "rgba(245, 158, 11, 0.1)"
-        status_border = "rgba(245, 158, 11, 0.25)"
-        status_dot = "#f59e0b"
-    else:
-        status_label = "Service Disruption"
-        status_color = "#f43f5e"
-        status_bg = "rgba(244, 63, 94, 0.1)"
-        status_border = "rgba(244, 63, 94, 0.25)"
-        status_dot = "#f43f5e"
+    themes = {
+        "healthy": ("All Systems Operational", "rgba(16, 185, 129, 0.1)", "rgba(16, 185, 129, 0.25)", "#10b981"),
+        "degraded": ("System Degraded", "rgba(245, 158, 11, 0.1)", "rgba(245, 158, 11, 0.25)", "#f59e0b"),
+    }
+    status_label, status_bg, status_border, status_dot = themes.get(
+        status, ("Service Disruption", "rgba(244, 63, 94, 0.1)", "rgba(244, 63, 94, 0.25)", "#f43f5e")
+    )
 
     total_services = len(loaded) + len(failed)
     total_endpoints = sum(len(routes) for routes in routes_map.values())
@@ -807,7 +789,7 @@ def render_statuspage(
         <div class="status-dot"></div>
         <div>
           <div class="banner-headline" id="banner-text">{status_label}</div>
-          <div class="banner-meta">Memory-resident routers with fast-fail isolation</div>
+          <div class="banner-meta">FastAPI gateway with route-level fault isolation</div>
         </div>
       </div>
       <div class="banner-telemetry">
@@ -830,12 +812,12 @@ def render_statuspage(
       <div class="metric-card">
         <div class="metric-label">Warmup Duration</div>
         <div class="metric-value">{warmup_seconds:.2f}s</div>
-        <div class="metric-sub">Lifespan sequential pre-warming</div>
+        <div class="metric-sub">Sequential boot prefetch</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Payload Guard</div>
+        <div class="metric-label">Request Limits</div>
         <div class="metric-value">{max_size_mb} MB</div>
-        <div class="metric-sub">{timeout_s}s execution timeout</div>
+        <div class="metric-sub">{timeout_s}s timeout</div>
       </div>
     </div>
 
@@ -862,7 +844,7 @@ def render_statuspage(
     <!-- Tab 2: Gateway Specs -->
     <div id="tab-specs" class="tab-content">
       <div class="card">
-        <h3 style="font-size: 0.95rem; margin-bottom: 1rem; color: var(--text);">Gateway Security &amp; Middleware Configuration</h3>
+        <h3 style="font-size: 0.95rem; margin-bottom: 1rem; color: var(--text);">Security and runtime limits</h3>
         <table class="specs-table">
           <thead>
             <tr>
@@ -884,7 +866,7 @@ def render_statuspage(
             </tr>
             <tr>
               <td><code>RequestLimitMiddleware</code></td>
-              <td>Hard ceiling: {max_size_mb} MB body; {timeout_s}s timeout</td>
+              <td>Rejects payloads over {max_size_mb} MB; aborts requests after {timeout_s}s</td>
               <td><span class="pill pill-success">Active</span></td>
             </tr>
             <tr>
@@ -914,7 +896,7 @@ def render_statuspage(
     </div>
 
     <footer>
-      <span>HF Gateway Engine &bull; Hugging Face Docker Space</span>
+      <span>HF Backend &bull; Hugging Face Docker Space</span>
       <div class="footer-links">
         <a href="{html.escape(docs_url)}">Swagger Docs</a>
         <a href="/health">/health</a>
