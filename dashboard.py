@@ -1,8 +1,4 @@
-"""Minimalist Statuspage HTML renderer for HF Backend Gateway.
-
-Renders system status, per-project readiness badges, boot warmup timings,
-and endpoint links with clean, modern dark-mode styling.
-"""
+"""Renders the HTML status page for the gateway."""
 
 import html
 from typing import Any
@@ -61,7 +57,10 @@ def render_statuspage(health_data: dict[str, Any]) -> str:
                 '<span class="tag">SVM</span>'
                 '<span class="tag">KNN</span>'
             )
-            inspect_link = f'<a href="{prefix}/health" class="link-btn">/heartflow/health</a>'
+            inspect_link = (
+                f'<a href="{prefix}/health" class="link-btn">/heartflow/health</a> '
+                f'<a href="{prefix}/metrics" class="link-btn">/metrics</a>'
+            )
         else:
             model_tags = '<span class="tag">Standard Router</span>'
             inspect_link = ""
@@ -115,6 +114,7 @@ def render_statuspage(health_data: dict[str, Any]) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HF Backend Gateway Status</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <style>
     :root {{
       --bg: #0b0f17;
@@ -392,7 +392,9 @@ def render_statuspage(health_data: dict[str, Any]) -> str:
         <span class="brand-name">HF Backend</span>
         <span class="brand-tag">Gateway</span>
       </div>
-      <div>
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <a href="/project" class="link-btn" title="Interactive Swagger UI Documentation">API Docs (/project)</a>
+        <span style="color: var(--text-dim);">&bull;</span>
         <a href="/health" class="link-btn" title="View machine-readable JSON">JSON Endpoint</a>
       </div>
     </header>
@@ -402,7 +404,7 @@ def render_statuspage(health_data: dict[str, Any]) -> str:
         <span class="beacon">{status_icon}</span>
         <div>
           <div class="status-title">{status_text}</div>
-          <div class="status-updated">Pre-warmed memory resident routing</div>
+          <div class="status-updated">Pre-warmed models in memory</div>
         </div>
       </div>
       <div class="status-updated">
@@ -414,17 +416,17 @@ def render_statuspage(health_data: dict[str, Any]) -> str:
       <div class="stat-card">
         <div class="stat-label">Warmup Latency</div>
         <div class="stat-value">{warmup_seconds:.2f}s</div>
-        <div class="stat-sub">Lifespan sequential pre-warming</div>
+        <div class="stat-sub">Startup warmup time</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Active Services</div>
         <div class="stat-value">{len(loaded)} / {total_services}</div>
-        <div class="stat-sub">Isolated router mounts</div>
+        <div class="stat-sub">Mounted routers</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">First Inference</div>
         <div class="stat-value">&lt; 100ms</div>
-        <div class="stat-sub">Zero cold-start delay</div>
+        <div class="stat-sub">Loaded at boot</div>
       </div>
     </div>
 
@@ -436,6 +438,7 @@ def render_statuspage(health_data: dict[str, Any]) -> str:
     <footer>
       <span>Hugging Face Docker Space &bull; Port 7860</span>
       <div class="footer-links">
+        <a href="/project">Swagger UI (/project)</a>
         <a href="/health">/health</a>
         <a href="https://github.com/rachit-mangawa/hf-backend" target="_blank" rel="noopener">GitHub</a>
         <a href="/?format=json">Raw JSON</a>

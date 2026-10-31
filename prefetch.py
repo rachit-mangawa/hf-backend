@@ -1,7 +1,7 @@
-"""Build-time model prefetch script.
+"""Caches model weights during Docker build.
 
-Reads project routes from registry.py and invokes warmup() on each
-top-level package to bake weights into the Docker image filesystem.
+Imports each package in registry.py and runs its warmup function so weights
+are stored in the image layer rather than fetched at runtime.
 """
 
 import importlib

@@ -78,8 +78,33 @@ def test_host_with_mocks(monkeypatch, caplog):
             assert res_sem.status_code == 200
             assert res_sem.json() == {"project": "semantic", "status": "ok"}
 
-            for doc_url in ["/docs", "/redoc", "/openapi.json"]:
+            for doc_url in ["/docs", "/redoc"]:
                 assert client.get(doc_url).status_code == 404
+
+            res_docs = client.get("/project")
+            assert res_docs.status_code == 200
+            assert "swagger" in res_docs.text.lower() or "text/html" in res_docs.headers.get("content-type", "")
+
+            res_openapi = client.get("/openapi.json")
+            assert res_openapi.status_code == 200
+            assert "paths" in res_openapi.json()
+
+            # Security headers verification
+            assert res_health.headers.get("x-content-type-options") == "nosniff"
+            assert res_health.headers.get("x-xss-protection") == "0"
+            assert res_health.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
+            assert "frame-ancestors" in res_health.headers.get("content-security-policy", "")
+
+            # HSTS header when forwarded proto is https
+            res_https = client.get("/health", headers={"x-forwarded-proto": "https"})
+            assert "max-age" in res_https.headers.get("strict-transport-security", "")
+
+            # Favicon 204 endpoint
+            assert client.get("/favicon.ico").status_code == 204
+
+            # Malformed content-length test
+            res_bad_cl = client.post("/semantic/echo", headers={"content-length": "invalid-len"})
+            assert res_bad_cl.status_code == 400
 
             cors_allowed = client.get(
                 "/semantic/ping",
@@ -400,3 +425,24 @@ def test_host_websocket_through_middleware(monkeypatch):
         with client.websocket_connect("/mockws/ws") as ws:
             frames = [ws.receive_text() for _ in range(3)]
             assert frames == ["frame-0", "frame-1", "frame-2"]
+
+
+def test_docs_killswitch(monkeypatch):
+    create_mock_modules()
+    monkeypatch.setenv("ENABLE_DOCS", "false")
+    monkeypatch.setenv("DISABLE_PROJECTS", "")
+
+    import registry
+    registry.PROJECT_REGISTRY = {
+        "/semantic": "mock_semantic.router:router",
+    }
+
+    if "main" in sys.modules:
+        del sys.modules["main"]
+
+    import main
+    with TestClient(main.app) as client:
+        assert client.get("/project").status_code == 404
+        assert client.get("/openapi.json").status_code == 404
+        assert client.get("/docs").status_code == 404
+        assert client.get("/redoc").status_code == 404

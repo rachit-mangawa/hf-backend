@@ -1,13 +1,15 @@
 # Architecture Guide
 
-This document describes the design, execution lifecycle, and operational contracts of `hf-backend`.
+Technical design, container lifecycle, and service contracts for `hf-backend`.
 
-## System Overview
+---
 
-`hf-backend` is an aggregation gateway deployed on a Hugging Face Docker Space. Rather than hosting business logic directly, it mounts domain-specific routers from separate repositories under dedicated URL prefixes.
+## System overview
+
+`hf-backend` is an aggregation gateway running in a Hugging Face Docker Space. It mounts routers from separate repositories under dedicated URL prefixes.
 
 ```
-Internet Request
+Incoming Request
        │
        ▼
 [ Hugging Face Edge Proxy ] (:443)
@@ -16,54 +18,56 @@ Internet Request
 [ Uvicorn Worker ] (:7860)
        │
        ▼
-[ RequestLimitMiddleware ] (Body size cap + request timeout)
+[ SecurityHeadersMiddleware ] (HSTS, nosniff, frame-ancestors)
        │
-       ├── / (browser) ─────► [ Statuspage Dashboard (HTML) ]
-       ├── /status ─────────► [ Statuspage Dashboard (HTML) ]
-       ├── /health ─────────► [ Host Health Monitor (JSON) ]
-       ├── /semantic/* ─────► [ Mounted Subproject: Semantic-Comment-Analyze ]
-       └── /<prefix>/* ─────► [ Future Mounted Services ]
+       ▼
+[ RequestLimitMiddleware ] (Body size cap + request execution timeout)
+       │
+       ├── /project ────────► [ Interactive Swagger UI ]
+       ├── / (browser) ─────► [ Status Dashboard (HTML) ]
+       ├── /status ─────────► [ Status Dashboard (HTML) ]
+       ├── /health ─────────► [ Aggregated Health Monitor (JSON) ]
+       ├── /heartflow/* ────► [ Mounted Subproject: HeartFlow OS ]
+       ├── /semantic/* ─────► [ Mounted Subproject: Semantic Comment Analyzer ]
+       └── /<prefix>/* ─────► [ Dynamically Mounted Future Services ]
 ```
 
-The gateway handles shared infrastructure requirements:
-- Dynamic discovery and mounting of standalone service packages.
-- Early input validation (payload length enforcement before buffering).
-- Global request timeouts preventing worker stalls.
-- Zero-cold-start initialization through baked image weights and startup warmups.
-- Centralized health checks reflecting mount status and model readiness.
+The gateway handles shared infrastructure tasks:
+* Dynamic discovery and isolated mounting of external service packages.
+* Inbound payload verification before memory buffering.
+* Global request timeouts to prevent worker starvation.
+* Zero-cold-start inference by baking weights at build time and warming them up at boot.
+* Centralized health tracking reflecting route mounting and model readiness.
 
 ---
 
-## The Cold-Start Problem and Solution
+## Container lifecycle and model prefetching
 
-Machine learning services on serverless or restart-prone container hosts typically suffer from two cold-start stages:
+Restarting an ML container typically introduces two delays: downloading weights over the network, and compiling or loading model tensors into memory on the first user request.
 
-1. **Storage delay**: Weights must be pulled from Hugging Face Hub over the network at first boot, taking anywhere from 30 seconds to several minutes.
-2. **Compute delay**: Models must be deserialized, moved to memory, and compiled or JIT-traced on the first inference call.
-
-`hf-backend` eliminates both delays across container restarts.
+`hf-backend` eliminates both delays with a two-phase build and boot workflow:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 1. BUILD TIME (Docker Build via BuildKit)                   │
+│ 1. DOCKER BUILD TIME (BuildKit)                             │
 │                                                             │
 │  pip install requirements.txt                               │
 │        │                                                    │
 │  COPY registry.py prefetch.py                               │
 │        │                                                    │
 │  RUN python prefetch.py                                     │
-│        └─► Imports mounted packages                         │
-│        └─► Calls warmup()                                   │
-│        └─► Models download into /home/user/hf-cache         │
+│        ├─► Imports registered packages                      │
+│        ├─► Dispatches warmup()                              │
+│        └─► Weights download into /home/user/hf-cache        │
 │        │                                                    │
 │  ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1                │
 │        │                                                    │
-│  COPY . . (App code changes never bust prefetch cache)      │
+│  COPY . . (Code changes do not invalidate model cache)      │
 └─────────────────────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 2. CONTAINER STARTUP (Lifespan Hook)                        │
+│ 2. CONTAINER STARTUP (FastAPI Lifespan)                     │
 │                                                             │
 │  Uvicorn starts process [1]                                 │
 │        │                                                    │
@@ -71,42 +75,42 @@ Machine learning services on serverless or restart-prone container hosts typical
 │        │                                                    │
 │  Lifespan executes:                                         │
 │        ├─► Iterates over loaded projects                    │
-│        ├─► Dispatches warmup() in a background thread       │
-│        └─► Applies WARMUP_TIMEOUT_SECONDS per project       │
+│        ├─► Calls warmup() in a background worker thread     │
+│        └─► Enforces WARMUP_TIMEOUT_SECONDS per project      │
 │        │                                                    │
-│  All warmups finish / weights load into memory              │
+│  All models loaded into RAM / dummy inferences complete     │
 │        │                                                    │
-│  Server opens socket :7860 and accepts incoming traffic     │
+│  Uvicorn opens port 7860 and accepts incoming requests      │
 └─────────────────────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 3. SERVING RUNTIME                                          │
 │                                                             │
-│  First incoming inference request (e.g. /semantic/analyze)  │
-│        └─► Models already resident in memory                │
-│        └─► Response latency < 100 ms                        │
+│  First incoming inference request                           │
+│        └─► Weights already resident in memory               │
+│        └─► Initial response latency < 100 ms                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Layer Caching Details
+### Build caching strategy
 
-The build uses a two-phase copy strategy:
-1. `requirements.txt` is installed first.
-2. `registry.py` and `prefetch.py` are copied, then `prefetch.py` executes. Model weights are stored in `/home/user/hf-cache`.
-3. `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` are exported to lock down the filesystem at runtime.
-4. Application code (`main.py`, tests, documentation) is copied last.
+The Dockerfile separates dependency installation from code copying:
+1. `requirements.txt` installs first.
+2. `registry.py` and `prefetch.py` are copied, and `prefetch.py` runs. Model weights are saved inside `/home/user/hf-cache`.
+3. `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` are set, disabling runtime network calls to the Hub.
+4. Application code (`main.py`, `dashboard.py`, tests) is copied last.
 
-When you modify routing logic or update documentation, Docker reuses the cached model layers. The Space rebuilds and restarts in seconds rather than downloading multi-gigabyte checkpoints repeatedly.
+When you update gateway routing or edit documentation, Docker reuses the cached model layers. The Space rebuilds and restarts in seconds rather than redownloading multi-gigabyte checkpoints.
 
 ---
 
-## Service Contracts
+## Service contracts
 
-Every service mounted into `hf-backend` follows a standard contract.
+Every subproject mounted into `hf-backend` follows two standard conventions.
 
-### 1. Package Structure
-A subproject must be installable as a Python package (e.g., via git tag in `requirements.txt`) and expose a FastAPI `APIRouter` instance:
+### 1. Package structure and router export
+A subproject must be installable as a Python package (pinned by Git tag in `requirements.in`) and export a FastAPI `APIRouter` instance:
 
 ```python
 # target: "semantic_backend.router:router"
@@ -116,11 +120,11 @@ router = APIRouter()
 
 @router.get("/health")
 def project_health():
-    ...
+    return {"status": "healthy"}
 ```
 
-### 2. Startup Warmup
-If the top-level package defines a callable named `warmup()`, the host lifespan executes it at boot time:
+### 2. Startup warmup function
+If the top-level package defines a callable named `warmup()`, the gateway lifespan executes it during container boot:
 
 ```python
 # semantic_backend/__init__.py
@@ -130,61 +134,64 @@ def warmup():
 ```
 
 Warmup conventions:
-- Must load lazy checkpoints (embeddings, classification heads, tokenizers).
-- Runs one dummy inference pass through the primary execution path.
-- Runs synchronously; the host wraps execution in `asyncio.to_thread`.
-- If a project does not define `warmup()`, the host records `"no warmup"` and continues without error.
+* Loads lazy model checkpoints (tokenizers, classification heads, neural nets).
+* Runs a synthetic inference pass to prime memory and execution graphs.
+* Runs synchronously; the gateway wraps it in `asyncio.to_thread`.
+* If a package omits `warmup()`, the gateway marks it as `"no warmup"` and proceeds normally.
 
 ---
 
-## Guard Middleware
+## Middleware stack
 
-The host places `RequestLimitMiddleware` in front of all endpoints:
+Incoming requests traverse three layers of middleware before reaching subproject routers:
 
-1. **Streaming Body Guard**:
-   Inspects the `Content-Length` header upfront. If the declared size exceeds `MAX_BODY_SIZE_BYTES` (default 10 MB), the connection returns HTTP 413 immediately. For chunked or undeclared streams, chunks are counted on arrival, raising HTTP 413 before memory exhaustion occurs.
+```
+Request ──► [ SecurityHeadersMiddleware ]
+                 │
+                 ▼
+            [ RequestLimitMiddleware ] ──(Exceeds limit)──► 413 Payload Too Large
+                 │                     ──(Timeout)──────► 504 Gateway Timeout
+                 ▼
+            [ CORSMiddleware ]
+                 │
+                 ▼
+            [ Subproject Router ]
+```
 
-2. **Request Timeout**:
-   Wraps downstream route evaluation with `asyncio.wait_for`. If route processing exceeds `REQUEST_TIMEOUT_SECONDS` (default 60.0s), the gateway returns an HTTP 504 Gateway Timeout.
+1. `SecurityHeadersMiddleware`: Sets nosniff, Referrer-Policy, and a frame-ancestors CSP directive so Hugging Face Spaces can embed the UI without exposing it to third-party clickjacking. Adds HSTS on HTTPS requests.
+2. `RequestLimitMiddleware`: Fast-fails requests larger than `MAX_BODY_SIZE_BYTES` using the `Content-Length` header (returning 413) or rejects unparseable headers (returning 400). On chunked or streaming requests, it tallies bytes on arrival and raises 413 if the limit is exceeded. Downstream handler execution is wrapped in `asyncio.wait_for`, returning 504 if a task exceeds `REQUEST_TIMEOUT_SECONDS`.
+3. `CORSMiddleware`: Handles browser preflight checks against configured origins.
 
 ---
 
-## Health and Degradation Model
+## Health and degradation model
 
-The `/health` endpoint (and `/` when requested by API clients) reports the aggregate status of all registered projects:
+The `/health` endpoint reports the aggregated status of the host and each mounted project:
 
 ```json
 {
   "status": "healthy",
   "loaded": {
-    "/semantic": "semantic_backend.router:router"
+    "/semantic": "semantic_backend.router:router",
+    "/heartflow": "heartflow_backend.router:router"
   },
   "failed": {},
   "warm_status": {
-    "/semantic": "warmed"
+    "/semantic": "warmed",
+    "/heartflow": "warmed"
   },
   "total_warmup_seconds": 6.484
 }
 ```
 
-### Evaluation Logic
+### Status evaluation rules
 
-```
-   ┌──────────────────────────────────────────────┐
-   │ Any projects failed to mount?                │
-   │                OR                            │───► "degraded"
-   │ Any project warmup failed / timed out?       │
-   └──────────────────────────────────────────────┘
-                          │ No
-                          ▼
-   ┌──────────────────────────────────────────────┐
-   │ Are there any loaded projects?               │───► No: "unhealthy"
-   └──────────────────────────────────────────────┘
-                          │ Yes
-                          ▼
-                     "healthy"
-```
+| Condition | Overall Status | Serving Behavior |
+| :--- | :--- | :--- |
+| All registered projects mounted and all warmups succeeded | `healthy` | All endpoints operational |
+| A project failed to mount, or a warmup threw an error or timed out | `degraded` | Failed project marked with reason; remaining projects serve traffic normally |
+| No projects could be imported or loaded | `unhealthy` | Host runs but no domain routes are active |
 
-- A project without a `warmup()` reports `"no warmup"` and remains `"healthy"`.
-- If a warmup throws an exception or exceeds `WARMUP_TIMEOUT_SECONDS`, the host logs the error, marks the project as `"failed: <reason>"`, and marks overall status as `"degraded"`.
-- Surviving projects continue serving traffic even if an adjacent service is degraded.
+* A project without a `warmup()` reports `"no warmup"` and remains `healthy`.
+* If a warmup throws an exception or exceeds `WARMUP_TIMEOUT_SECONDS`, the gateway records `"failed: <reason>"` in `warm_status` and logs the traceback.
+* Individual subproject failures are isolated; one broken dependency will not crash the host or prevent healthy services from serving traffic.

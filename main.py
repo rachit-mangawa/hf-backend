@@ -1,8 +1,7 @@
-"""HF Backend Gateway.
+"""FastAPI gateway for subproject routers on Hugging Face Spaces.
 
-Aggregates subproject routers mounted on a Hugging Face Space. Handles
-model warmup during lifespan startup, streaming payload size limits,
-and centralized health tracking.
+Mounts external routers, runs startup model warmups, enforces request limits
+and security headers, and serves health status.
 """
 
 import asyncio
@@ -34,8 +33,24 @@ request_timeout = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "60.0"))
 default_warmup_timeout = float(os.getenv("WARMUP_TIMEOUT_SECONDS", "300.0"))
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Sets security headers and allows Hugging Face Space framing."""
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-XSS-Protection"] = "0"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "frame-ancestors 'self' https://huggingface.co https://*.hf.space;"
+        )
+        if request.headers.get("x-forwarded-proto") == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
 class RequestLimitMiddleware(BaseHTTPMiddleware):
-    """Enforces incoming request payload limits and execution timeouts."""
+    """Enforces request payload limits and execution timeouts."""
 
     def __init__(self, app, max_size: int, timeout: float):
         super().__init__(app)
@@ -43,9 +58,16 @@ class RequestLimitMiddleware(BaseHTTPMiddleware):
         self.timeout = timeout
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        if request.scope.get("type") != "http":
+            return await call_next(request)
+
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > self.max_size:
-            return Response(content="Payload Too Large", status_code=413)
+        if content_length:
+            try:
+                if int(content_length) > self.max_size:
+                    return Response(content="Payload Too Large", status_code=413)
+            except ValueError:
+                return Response(content="Invalid Content-Length Header", status_code=400)
 
         bytes_received = 0
         original_receive = request._receive
@@ -68,7 +90,7 @@ class RequestLimitMiddleware(BaseHTTPMiddleware):
 
 
 async def run_warmup_for_project(prefix: str, target: str, timeout: float):
-    """Executes a mounted package's warmup function in a worker thread."""
+    """Runs a package warmup function in a worker thread."""
     logger.info(f"[{prefix}] Checking warmup for target '{target}'...")
     try:
         module_name = target.split(":")[0]
@@ -109,20 +131,35 @@ async def run_all_warmups():
 async def lifespan(app: FastAPI):
     await run_all_warmups()
     yield
+    logger.info("Lifespan shutdown: Gateway stopped cleanly.")
 
+
+enable_docs = os.getenv("ENABLE_DOCS", "true").lower() in ("true", "1", "yes")
+docs_url = os.getenv("DOCS_URL", "/project") if enable_docs else None
+openapi_url = os.getenv("OPENAPI_URL", "/openapi.json") if enable_docs else None
 
 app = FastAPI(
-    title="HF Backend",
-    docs_url=None,
+    title="HF Backend Gateway",
+    description="API gateway for HeartFlow OS and Semantic Comment Analyzer.",
+    version="1.0.0",
+    docs_url=docs_url,
     redoc_url=None,
-    openapi_url=None,
+    openapi_url=openapi_url,
     lifespan=lifespan,
 )
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLimitMiddleware, max_size=max_body_size, timeout=request_timeout)
 
 raw_origins = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
-allowed_origins = [o for o in raw_origins if o != "*"]
+default_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "https://heartflow.vercel.app",
+]
+allowed_origins = [o for o in (raw_origins or default_origins) if o != "*"]
 if allowed_origins:
     app.add_middleware(
         CORSMiddleware,
@@ -133,7 +170,7 @@ if allowed_origins:
     )
 
 
-@app.get("/health")
+@app.get("/health", tags=["Host Gateway"])
 def health():
     any_warmup_failed = any(status.startswith("failed:") for status in warm_status.values())
     has_mount_failures = len(failed_projects) > 0
@@ -154,12 +191,17 @@ def health():
     }
 
 
-@app.get("/status", response_class=HTMLResponse)
+@app.get("/status", response_class=HTMLResponse, tags=["Host Gateway"])
 def status_page():
     return HTMLResponse(content=render_statuspage(health()))
 
 
-@app.get("/")
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
+
+
+@app.get("/", tags=["Host Gateway"])
 def root(request: Request, format: str | None = None):
     accept = request.headers.get("accept", "")
     wants_html = format == "html" or ("text/html" in accept and not accept.startswith("*/*"))
@@ -169,7 +211,7 @@ def root(request: Request, format: str | None = None):
 
 
 def load_routers():
-    """Mounts routers dynamically from registry.py with isolated failure handling."""
+    """Imports and mounts routers defined in registry.py."""
     loaded_projects.clear()
     failed_projects.clear()
     warm_status.clear()
@@ -188,9 +230,10 @@ def load_routers():
             module_name, attr_name = target.split(":")
             module = importlib.import_module(module_name)
             router = getattr(module, attr_name)
-            app.include_router(router, prefix=prefix)
+            tag = "Semantic Comment Analyzer" if "semantic" in prefix else ("HeartFlow OS" if "heartflow" in prefix else prefix.strip("/").title())
+            app.include_router(router, prefix=prefix, tags=[tag])
             if prefix == "/heartflow":
-                app.include_router(router)
+                app.include_router(router, include_in_schema=False)
             loaded_projects[prefix] = target
             logger.info(f"[{prefix}] Successfully mounted at {prefix}")
         except Exception as e:

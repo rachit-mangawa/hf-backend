@@ -7,98 +7,151 @@ sdk: docker
 app_port: 7860
 ---
 
-# HF Backend
+# HF Backend Gateway
 
-FastAPI gateway running on a Hugging Face Docker Space. The gateway mounts backend routers from standalone project repositories under designated URL prefixes.
+A FastAPI gateway hosted on Hugging Face Spaces. It mounts backend routers from external project repositories (`heartflow` and `semantic`) into one container, handling model pre-warming, request limits, security headers, and health monitoring.
 
-For in-depth lifecycle mechanics, prefetch caching, and degradation semantics, see [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/ARCHITECTURE.md).
+Read [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/ARCHITECTURE.md) for details on build caching, lifespan warmups, and failure isolation.
 
-## How It Works
+---
 
-The host application does not contain domain business logic. Each subproject is maintained in its own repository, exposes a router in `<package>/router.py`, and installs as a standard Python package.
+## Quick links
 
-The host imports each router from `registry.py` and mounts it under its configured prefix. If a router fails to import, the host logs the error, records the failure, and keeps running for the remaining services.
+| Resource | Path | Description |
+| :--- | :--- | :--- |
+| Interactive API docs | [`/project`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L112) | Swagger UI for all mounted services |
+| Status dashboard | [`/status`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L189) | Dark-mode overview of mount status and warmup latencies |
+| Health endpoint | [`/health`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L168) | JSON health and readiness payload |
+| OpenAPI schema | `/openapi.json` | OpenAPI 3.1 specification |
 
-```
-/project-1/* -> HEARTFLOW_OS router
-/semantic/*  -> Semantic Comment Analyzer router
-/health      -> Host health and readiness status
-```
+---
 
-## Adding a Service
+## Mounted services
 
-Adding a new service takes two steps:
+Each subproject lives in its own repository, installs as a Python package via git tag, and exports an `APIRouter`.
 
-1. Register the URL prefix and target router in `registry.py`:
+| Route Prefix | Service | Source Repository | Capabilities |
+| :--- | :--- | :--- | :--- |
+| `/heartflow` | HeartFlow OS | [`rachit-mangawa/HEARTFLOW_OS`](https://github.com/rachit-mangawa/HEARTFLOW_OS) | Vitals risk scoring, SHAP explanations, TinyML C export, model retraining |
+| `/semantic` | Semantic Analyzer | [`rachit-mangawa/Semantic-Comment-Analyze`](https://github.com/rachit-mangawa/Semantic-Comment-Analyze) | RoBERTa sentiment analysis, intent classification, CSV batch streaming |
+
+If one project fails to load or warm up, the gateway records the failure, marks overall status as `degraded`, and continues serving the remaining healthy services.
+
+---
+
+## Adding a new service
+
+Adding a service takes two steps:
+
+### 1. Register the router
+Add the URL prefix and router target to `registry.py`:
+
 ```python
 PROJECT_REGISTRY = {
     "/semantic": "semantic_backend.router:router",
+    "/heartflow": "heartflow_backend.router:router",
     "/new-service": "new_service.router:router",
 }
 ```
 
-2. Pin the Git tag or release in `requirements.in`, then compile `requirements.txt`:
+### 2. Pin the dependency
+Add the git repository URL and release tag to `requirements.in`:
+
 ```text
 git+https://github.com/<owner>/<repo>.git@v1.0#subdirectory=backend
 ```
 
-Pushing to `main` deploys the changes to Hugging Face and rebuilds the Space container.
+Compile `requirements.txt` and push to `main`:
 
-## Configuration
+```bash
+pip-compile requirements.in -o requirements.txt
+git commit -am "feat: mount new-service router"
+git push origin main
+```
 
-Set these variables in the Space settings under **Variables and secrets**:
+The GitHub Actions workflow syncs the code to the Hugging Face Space and rebuilds the container.
 
-| Variable | Required | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `CORS_ALLOWED_ORIGINS` | No | None | Comma-separated allowed origins. Wildcards (`*`) are ignored. |
-| `DISABLE_PROJECTS` | No | None | Comma-separated prefixes to skip loading (e.g. `semantic`). |
-| `MAX_BODY_SIZE_BYTES` | No | 10485760 (10 MB) | Maximum request body size before returning HTTP 413. |
-| `REQUEST_TIMEOUT_SECONDS` | No | 60.0 | Request timeout before returning HTTP 504. |
-| `WARMUP_TIMEOUT_SECONDS` | No | 300.0 | Warmup timeout per project during container boot. |
-| `GITHUB_TOKEN` | Only for private repos | None | GitHub token passed as a build secret to clone private dependencies. |
+---
 
-Repository secrets for GitHub Actions:
+## Environment configuration
 
-| Secret | Description |
-| :--- | :--- |
-| `HF_BACKEND_SPACE` | Hugging Face token with write permissions to push code and restart the Space. |
-| `HF_SPACE_URL` | Optional health URL for the keep-alive workflow. |
+Configure these settings in the Hugging Face Space under **Settings > Variables and secrets**:
 
-## Endpoints
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `ENABLE_DOCS` | `true` | Toggles Swagger UI at `/project` and `/openapi.json`. |
+| `DOCS_URL` | `/project` | Path where Swagger UI is served. |
+| `OPENAPI_URL` | `/openapi.json` | Path where the OpenAPI specification is served. |
+| `CORS_ALLOWED_ORIGINS` | *(localhost, Vercel)* | Comma-separated list of origins allowed for cross-origin requests. |
+| `DISABLE_PROJECTS` | *(none)* | Comma-separated prefixes to skip at boot (e.g. `semantic`). |
+| `MAX_BODY_SIZE_BYTES` | `10485760` (10 MB) | Maximum incoming request body size before returning HTTP 413. |
+| `REQUEST_TIMEOUT_SECONDS` | `60.0` | Timeout per request before returning HTTP 504. |
+| `WARMUP_TIMEOUT_SECONDS` | `300.0` | Maximum time allowed for each package warmup call at boot. |
+| `GITHUB_TOKEN` | *(none)* | Personal access token used during Docker build to clone private repos. |
 
-### `GET /` and `GET /status`
-Visiting the root `/` in a browser or accessing `/status` renders a status dashboard displaying service readiness beacons, lifespan warmup latencies, active router mounts, and direct route links.
+---
 
-When accessed with `Accept: application/json` or `/?format=json`, the root endpoint returns the raw health JSON structure.
+## Endpoints and responses
 
 ### `GET /health`
-Returns the status of the host and each registered project:
+Returns the status of the host and each mounted project:
 
 ```json
 {
   "status": "healthy",
   "loaded": {
-    "/semantic": "semantic_backend.router:router"
+    "/semantic": "semantic_backend.router:router",
+    "/heartflow": "heartflow_backend.router:router"
   },
   "failed": {},
   "warm_status": {
-    "/semantic": "warmed"
+    "/semantic": "warmed",
+    "/heartflow": "warmed"
   },
   "total_warmup_seconds": 6.48
 }
 ```
 
-Status outcomes:
-- `healthy`: All registered projects mounted successfully and no warmup failed.
-- `degraded`: One or more services failed to mount, or a warmup failed or timed out.
-- `unhealthy`: No services loaded successfully.
+Status values:
+* `healthy`: Every registered router mounted and warmed up without errors.
+* `degraded`: One or more services failed to mount or threw a warmup error. Surviving services remain operational.
+* `unhealthy`: No registered services loaded.
 
-Interactive documentation (`/docs`, `/redoc`, `/openapi.json`) is disabled for production hardening.
+### `GET /` and `GET /status`
+* Browser requests return an HTML status page with active routes, warmup timings, and links.
+* API clients sending `Accept: application/json` or `?format=json` receive the health JSON object.
 
-## Release Workflow
+### `GET /project`
+Interactive Swagger UI documentation. Routes are grouped by service:
+* HeartFlow OS: `/heartflow/predict`, `/heartflow/explain`, `/heartflow/metrics`, `/heartflow/dataset`, `/heartflow/export_tinyml`, `/heartflow/retrain`
+* Semantic Comment Analyzer: `/semantic/analyze`, `/semantic/batch`, `/semantic/health`
+* Host Gateway: `/health`, `/status`, `/`
 
-1. Test changes in the subproject repository.
-2. Tag the release (`git tag v1.0`, `git push origin v1.0`).
-3. Update the tag reference in `requirements.in` and recompile `requirements.txt`.
-4. Run `pytest` locally to verify routing and warmups.
-5. Push to `main`. The GitHub Actions workflow syncs the commit to Hugging Face and triggers a restart.
+---
+
+## Security controls
+
+The gateway applies several safeguards to every connection:
+* Security headers: sets `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 0`, and `Referrer-Policy: strict-origin-when-cross-origin`. Sets `Content-Security-Policy: frame-ancestors` so Hugging Face Spaces can embed the page while blocking third-party iframes. Injects `Strict-Transport-Security` on HTTPS connections.
+* Fast payload check: rejects requests that exceed `MAX_BODY_SIZE_BYTES` upfront, returning HTTP 413 before the body loads into memory. Returns HTTP 400 if `Content-Length` is not a valid number.
+* Chunk metering: tracks arriving bytes on unbuffered streams to catch oversized uploads that omit `Content-Length`.
+* Timeout guard: bounds downstream route execution with `REQUEST_TIMEOUT_SECONDS`, returning HTTP 504 if a handler hangs.
+
+---
+
+## Local development
+
+```bash
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the gateway locally
+uvicorn main:app --reload --port 7860
+
+# Run automated tests
+pytest tests
+```
