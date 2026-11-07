@@ -39,6 +39,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-XSS-Protection"] = "0"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+        response.headers["Permissions-Policy"] = (
+            "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+        )
         response.headers["Content-Security-Policy"] = (
             "frame-ancestors 'self' https://huggingface.co https://*.hf.space;"
         )
@@ -169,7 +173,7 @@ if allowed_origins:
         allow_origins=allowed_origins,
         allow_origin_regex=r"^https://.*\.github\.io$",
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
         allow_headers=["*"],
     )
 
