@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>HF Backend &mdash; Hugging Face Support for Multi ML models on a single space</title>
+  <meta name="title" content="HF Backend - Hugging Face Support for Multi ML models on a single space">
+  <meta name="description" content="HF Backend - Hugging Face Support for Multi ML models on a single space">
+  <meta name="author" content="Rachit Mangawa">
+  <meta name="theme-color" content="#09090b">
+  <link rel="canonical" href="https://rachit-mangawa.github.io/hf-backend/">
+
+  <!-- Favicon & Touch Icons -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://rachit-mangawa.github.io/hf-backend/">
+  <meta property="og:site_name" content="HF Backend">
+  <meta property="og:title" content="HF Backend - Hugging Face Support for Multi ML models on a single space">
+  <meta property="og:description" content="HF Backend - Hugging Face Support for Multi ML models on a single space">
+  <meta property="og:image" content="https://rachit-mangawa.github.io/hf-backend/og-image.png">
+  <meta property="og:image:secure_url" content="https://rachit-mangawa.github.io/hf-backend/og-image.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1423">
+  <meta property="og:image:height" content="750">
+  <meta property="og:image:alt" content="HF Backend - Hugging Face Support for Multi ML models on a single space">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://rachit-mangawa.github.io/hf-backend/">
+  <meta name="twitter:title" content="HF Backend - Hugging Face Support for Multi ML models on a single space">
+  <meta name="twitter:description" content="HF Backend - Hugging Face Support for Multi ML models on a single space">
+  <meta name="twitter:image" content="https://rachit-mangawa.github.io/hf-backend/og-image.png">
+  <meta name="twitter:image:alt" content="HF Backend - Hugging Face Support for Multi ML models on a single space">
+
+  <!-- Fonts & Stylesheet -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;450;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body class="dark-theme">
+  <!-- Top Global Bar -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand-group">
+        <div class="brand-logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">HF Backend</span>
+        </div>
+      </div>
+
+      <nav class="nav-links" aria-label="Primary Navigation">
+        <a href="#services" class="nav-item">Services</a>
+        <a href="#playground" class="nav-item">Interactive Console</a>
+        <a href="#architecture" class="nav-item">Architecture</a>
+      </nav>
+
+      <div class="header-actions">
+        <a href="https://idkhowtocodefr-hf-backend.hf.space/project" target="_blank" rel="noopener noreferrer"
+          class="btn btn-ghost btn-sm">
+          <span>FastAPI Docs (Swagger)</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </a>
+        <a href="https://github.com/rachit-mangawa/hf-backend" target="_blank" rel="noopener noreferrer"
+          class="btn btn-primary btn-sm">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+          </svg>
+          <span>Repository</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <div class="hero-container">
+        <h1 class="hero-headline">
+          Pluggable API Gateway for Hosted Machine Learning Models.
+        </h1>
+
+        <p class="hero-subline">
+          Aggregates standalone Python packages into a single Hugging Face Spaces container.
+          Shared memory warmups, streaming byte guards, zero-downtime fault isolation, and deterministic lockfile
+          rebuilds.
+        </p>
+
+        <!-- Base URL Copy Widget -->
+        <div class="endpoint-chip-container">
+          <div class="endpoint-chip">
+            <span class="chip-method">BASE URL</span>
+            <code class="chip-url" id="base-url-text">https://idkhowtocodefr-hf-backend.hf.space</code>
+            <button type="button" class="chip-copy-btn" id="copy-base-btn" title="Copy Base URL"
+              aria-label="Copy Base URL">
+              <span class="btn-text">Copy</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Spec Highlights -->
+        <div class="stats-row">
+          <div class="stat-item">
+            <span class="stat-value">7860</span>
+            <span class="stat-label">Hugging Face Port</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value">&lt; 20ms</span>
+            <span class="stat-label">Gateway Overhead</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value">10 MB</span>
+            <span class="stat-label">Body Size Limit</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value">30 hrs</span>
+            <span class="stat-label">Keep-Alive Cadence</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Mounted Services Section -->
+    <section id="services" class="services-section">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-eyebrow">Mounted Services</span>
+          <h2 class="section-title">Independent Python packages. Isolated execution.</h2>
+          <p class="section-desc">Each subproject lives in its own repository, tests independently, and registers an
+            APIRouter. Faults in one service do not crash the gateway.</p>
+        </div>
+
+        <div class="services-grid">
+          <!-- HeartFlow OS Card -->
+          <article class="service-card" id="card-heartflow">
+            <div class="service-card-header">
+              <div class="service-icon icon-emerald">
+                <img src="icons/heartflow.svg" alt="HeartFlow Logo" width="28" height="28"
+                  style="border-radius: 4px; display: block;">
+              </div>
+              <div class="service-meta">
+                <div class="service-prefix">/heartflow</div>
+                <h3 class="service-name">HeartFlow OS</h3>
+              </div>
+              <span class="pill pill-success">Active</span>
+            </div>
+
+            <p class="service-body">
+              Clinical cardiovascular risk scoring and interpretability engine. Evaluates vitals, computes local SHAP
+              feature attributions, and compiles TinyML C header artifacts for embedded microcontrollers.
+            </p>
+
+            <div class="service-specs">
+              <div class="spec-tag"><span>ROC-AUC</span><strong>94.2%</strong></div>
+              <div class="spec-tag"><span>Explainability</span><strong>SHAP Tree</strong></div>
+              <div class="spec-tag"><span>Edge Target</span><strong>TinyML C99</strong></div>
+            </div>
+
+            <div class="service-routes">
+              <span class="route-label">Key Endpoints</span>
+              <ul class="route-list">
+                <li><code class="method post">POST</code><code>/heartflow/predict</code><span class="route-hint">Risk
+                    Score + SHAP</span></li>
+                <li><code class="method get">GET</code><code>/heartflow/tinyml/export</code><span class="route-hint">C
+                    Header Generator</span></li>
+                <li><code class="method post">POST</code><code>/heartflow/retrain</code><span
+                    class="route-hint">In-memory Retraining</span></li>
+              </ul>
+            </div>
+
+            <div class="service-footer">
+              <div class="service-links-left">
+                <a href="https://rachit-mangawa.github.io/HEARTFLOW_OS/" target="_blank" rel="noopener noreferrer"
+                  class="btn btn-primary btn-xs">
+                  <span>View Live</span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                </a>
+                <a href="https://github.com/rachit-mangawa/HEARTFLOW_OS" target="_blank" rel="noopener noreferrer"
+                  class="link-subtle">
+                  <span>GitHub</span>
+                </a>
+              </div>
+              <button class="btn btn-secondary btn-xs" onclick="activatePlayground('heartflow-predict')">Try
+                Endpoint</button>
+            </div>
+          </article>
+
+          <!-- Semantic Comment Analyze Card -->
+          <article class="service-card" id="card-semantic">
+            <div class="service-card-header">
+              <div class="service-icon icon-blue">
+                <img src="icons/semantic.svg" alt="Semantic Analyzer Logo" width="28" height="28"
+                  style="border-radius: 4px; display: block;">
+              </div>
+              <div class="service-meta">
+                <div class="service-prefix">/semantic</div>
+                <h3 class="service-name">Semantic Analyzer</h3>
+              </div>
+              <span class="pill pill-success">Active</span>
+            </div>
+
+            <p class="service-body">
+              Multi-task NLP inference engine for developer and community feedback. Computes dense sentence embeddings,
+              polarity scores, and multi-label toxicity classifications with pre-warmed weights.
+            </p>
+
+            <div class="service-specs">
+              <div class="spec-tag"><span>Embedding</span><strong>MiniLM-L6-v2</strong></div>
+              <div class="spec-tag"><span>Toxicity</span><strong>Multi-label</strong></div>
+              <div class="spec-tag"><span>Latency</span><strong>~18ms CPU</strong></div>
+            </div>
+
+            <div class="service-routes">
+              <span class="route-label">Key Endpoints</span>
+              <ul class="route-list">
+                <li><code class="method post">POST</code><code>/semantic/analyze</code><span class="route-hint">Full NLP
+                    Extraction</span></li>
+                <li><code class="method post">POST</code><code>/semantic/embed</code><span class="route-hint">384-dim
+                    Dense Vector</span></li>
+                <li><code class="method get">GET</code><code>/semantic/health</code><span class="route-hint">Model
+                    Readiness</span></li>
+              </ul>
+            </div>
+
+            <div class="service-footer">
+              <div class="service-links-left">
+                <a href="https://rachit-mangawa.github.io/Semantic-Comment-Analyze/" target="_blank"
+                  rel="noopener noreferrer" class="btn btn-primary btn-xs">
+                  <span>View Live</span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                </a>
+                <a href="https://github.com/rachit-mangawa/Semantic-Comment-Analyze" target="_blank"
+                  rel="noopener noreferrer" class="link-subtle">
+                  <span>GitHub</span>
+                </a>
+              </div>
+              <button class="btn btn-secondary btn-xs" onclick="activatePlayground('semantic-analyze')">Try
+                Endpoint</button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive API Explorer (FastAPI / Swagger UI Style) -->
+    <section id="playground" class="playground-section">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-eyebrow">Interactive API Explorer</span>
+          <h2 class="section-title">Test mounted routes live</h2>
+          <p class="section-desc">Explore and execute requests across the three mounted gateways. View sample payloads
+            and expected responses, or execute live queries directly against the Hugging Face Space.</p>
+        </div>
+
+        <div class="swagger-console">
+          <!-- Gateway Selector Tabs -->
+          <div class="gateway-tabs-bar" role="tablist" aria-label="Select Gateway">
+            <button class="gateway-tab active" id="tab-gw-hf" role="tab" aria-selected="true"
+              onclick="selectGateway('hf-backend')">
+              <span class="gw-tag">GATEWAY</span>
+              <span class="gw-name">/hf-backend</span>
+            </button>
+            <button class="gateway-tab" id="tab-gw-heartflow" role="tab" aria-selected="false"
+              onclick="selectGateway('heartflow')">
+              <span class="gw-tag">ML SERVICE</span>
+              <span class="gw-name">/heartflow</span>
+            </button>
+            <button class="gateway-tab" id="tab-gw-semantic" role="tab" aria-selected="false"
+              onclick="selectGateway('semantic')">
+              <span class="gw-tag">NLP SERVICE</span>
+              <span class="gw-name">/semantic</span>
+            </button>
+          </div>
+
+          <!-- Active Gateway Info Bar -->
+          <div class="gateway-info-bar">
+            <div class="gw-info-text">
+              <span class="gw-current-title" id="gw-current-title">HF Backend Core Gateway</span>
+              <span class="gw-current-desc" id="gw-current-desc">Central routing, status table, and health telemetry
+                endpoints.</span>
+            </div>
+            <div class="gw-info-base">
+              <span class="gw-base-label">Target:</span>
+              <code class="gw-base-code">https://idkhowtocodefr-hf-backend.hf.space</code>
+            </div>
+          </div>
+
+          <!-- Swagger-style Operations Accordion List -->
+          <div class="swagger-operations-list" id="swagger-operations-list">
+            <!-- Dynamically populated by app.js -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture & Resilience Section -->
+    <section id="architecture" class="arch-section">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-eyebrow">Reliability & Design</span>
+          <h2 class="section-title">Built for Hugging Face Spaces constraints</h2>
+          <p class="section-desc">Designed to handle container sleep timeouts, CPU quotas, and multi-model memory
+            warmups without failure cascading.</p>
+        </div>
+
+        <div class="arch-grid">
+          <div class="arch-card">
+            <div class="arch-step">01</div>
+            <h3 class="arch-card-title">Memory Warmup at Boot</h3>
+            <p class="arch-card-body">
+              Packages register optional non-blocking warmup routines. Transformer weights and decision trees are loaded
+              into RAM before traffic arrives, avoiding cold-hit timeouts.
+            </p>
+          </div>
+
+          <div class="arch-card">
+            <div class="arch-step">02</div>
+            <h3 class="arch-card-title">Streaming Payload Guards</h3>
+            <p class="arch-card-body">
+              A custom Starlette middleware counts raw stream bytes in chunks. Oversized payloads reject immediately at
+              10 MB before exhausting container RAM or blocking the event loop.
+            </p>
+          </div>
+
+          <div class="arch-card">
+            <div class="arch-step">03</div>
+            <h3 class="arch-card-title">Non-Failing Fault Isolation</h3>
+            <p class="arch-card-body">
+              If an upstream package raises an import error or fails warmup, the gateway marks overall health as
+              degraded, logs the traceback, and serves remaining subprojects uninterrupted.
+            </p>
+          </div>
+
+          <div class="arch-card">
+            <div class="arch-step">04</div>
+            <h3 class="arch-card-title">Deterministic Lockfiles</h3>
+            <p class="arch-card-body">
+              A 7-day scheduled cron tests upstream git semver releases, compiles verified hashes via <code
+                class="inline-code">uv</code>, and pushes to main to auto-rebuild Hugging Face Spaces.
+            </p>
+          </div>
+        </div>
+
+        <!-- System Topology & Ingress Architecture Diagram -->
+        <div class="topology-card">
+          <div class="topology-header">
+            <div class="topology-title-group">
+              <span class="topology-tag">System Topology</span>
+              <h3 class="topology-title">Request Ingress &amp; Subproject Routing Flow</h3>
+            </div>
+            <span class="topology-badge">Single Container &bull; Zero Network Hops</span>
+          </div>
+
+          <div class="svg-container">
+            <svg viewBox="0 0 940 430" fill="none" xmlns="http://www.w3.org/2000/svg" class="architecture-svg"
+              role="img" aria-label="System Architecture Diagram">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                  <path d="M 0 1.5 L 7 5 L 0 8.5 z" fill="#71717a" />
+                </marker>
+                <marker id="arrow-blue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6"
+                  orient="auto">
+                  <path d="M 0 1.5 L 7 5 L 0 8.5 z" fill="#38bdf8" />
+                </marker>
+                <marker id="arrow-green" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6"
+                  orient="auto">
+                  <path d="M 0 1.5 L 7 5 L 0 8.5 z" fill="#34d399" />
+                </marker>
+                <linearGradient id="ingressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#18181b" />
+                  <stop offset="100%" stop-color="#0c0c0e" />
+                </linearGradient>
+              </defs>
+
+              <!-- Outer Boundary: HF Spaces Container -->
+              <rect x="250" y="20" width="670" height="385" rx="8" fill="#0d0d10" stroke="#27272a" stroke-width="1.5"
+                stroke-dasharray="4 4" />
+              <text x="270" y="42" fill="#71717a" font-family="'Geist Mono', monospace" font-size="11" font-weight="600"
+                letter-spacing="0.05em">HUGGING FACE SPACES CONTAINER (:7860) &bull; LINUX x86_64 &bull; 16 GB SHARED
+                RAM</text>
+
+              <!-- COLUMN 1: CLIENTS & INGRESS SOURCES -->
+              <text x="30" y="32" fill="#a1a1aa" font-family="'Geist Mono', monospace" font-size="11" font-weight="600"
+                letter-spacing="0.05em">INGRESS CLIENTS</text>
+
+              <!-- Client 1: Web Frontends -->
+              <rect x="30" y="50" width="180" height="74" rx="6" fill="#18181b" stroke="#27272a" stroke-width="1.2" />
+              <text x="44" y="74" fill="#fafafa" font-family="'Inter', sans-serif" font-size="13" font-weight="600">Web
+                Frontends</text>
+              <text x="44" y="93" fill="#a1a1aa" font-family="'Inter', sans-serif" font-size="11">GitHub Pages
+                SPA</text>
+              <text x="44" y="110" fill="#71717a" font-family="'Geist Mono', monospace" font-size="10">Cross-Origin
+                Fetch</text>
+
+              <!-- Client 2: IoT / Edge Devices -->
+              <rect x="30" y="142" width="180" height="74" rx="6" fill="#18181b" stroke="#27272a" stroke-width="1.2" />
+              <text x="44" y="166" fill="#fafafa" font-family="'Inter', sans-serif" font-size="13"
+                font-weight="600">Edge Devices</text>
+              <text x="44" y="185" fill="#a1a1aa" font-family="'Inter', sans-serif" font-size="11">ESP32 &amp; Arduino
+                Nodes</text>
+              <text x="44" y="202" fill="#71717a" font-family="'Geist Mono', monospace" font-size="10">TinyML Header
+                Sync</text>
+
+              <!-- Client 3: Automated Crons -->
+              <rect x="30" y="234" width="180" height="74" rx="6" fill="#18181b" stroke="#27272a" stroke-width="1.2" />
+              <text x="44" y="258" fill="#fafafa" font-family="'Inter', sans-serif" font-size="13"
+                font-weight="600">Automation Crons</text>
+              <text x="44" y="277" fill="#a1a1aa" font-family="'Inter', sans-serif" font-size="11">GitHub Actions</text>
+              <text x="44" y="294" fill="#71717a" font-family="'Geist Mono', monospace" font-size="10">30h Keep-Alive
+                &amp; CI</text>
+
+              <!-- Connectors: Clients -> Gateway (Strict Horizontal Ingress) -->
+              <path d="M 210 87 H 236 C 244 87, 244 127, 252 127 H 264" stroke="#3f3f46" stroke-width="1.5"
+                stroke-dasharray="3 3" marker-end="url(#arrow)" fill="none" />
+              <path d="M 210 179 H 264" stroke="#3f3f46" stroke-width="1.5" stroke-dasharray="3 3"
+                marker-end="url(#arrow)" fill="none" />
+              <path d="M 210 271 H 236 C 244 271, 244 227, 252 227 H 264" stroke="#3f3f46" stroke-width="1.5"
+                stroke-dasharray="3 3" marker-end="url(#arrow)" fill="none" />
+
+              <!-- COLUMN 2: GATEWAY INGRESS & MIDDLEWARE PIPELINE -->
+              <rect x="270" y="60" width="220" height="260" rx="6" fill="url(#ingressGrad)" stroke="#3f3f46"
+                stroke-width="1.2" />
+              <rect x="270" y="60" width="220" height="34" rx="6" fill="#27272a" />
+              <text x="284" y="82" fill="#fafafa" font-family="'Inter', sans-serif" font-size="12"
+                font-weight="600">Starlette Gateway Ingress</text>
+
+              <!-- Middleware 1: Streaming Guard -->
+              <rect x="282" y="106" width="196" height="42" rx="4" fill="#18181b" stroke="#27272a" stroke-width="1" />
+              <text x="294" y="123" fill="#e4e4e7" font-family="'Inter', sans-serif" font-size="11"
+                font-weight="500">Streaming Byte Guard</text>
+              <text x="294" y="138" fill="#71717a" font-family="'Geist Mono', monospace" font-size="9.5">10 MB
+                Chunk-Count Limit</text>
+
+              <!-- Middleware 2: CORS & Headers -->
+              <rect x="282" y="156" width="196" height="42" rx="4" fill="#18181b" stroke="#27272a" stroke-width="1" />
+              <text x="294" y="173" fill="#e4e4e7" font-family="'Inter', sans-serif" font-size="11"
+                font-weight="500">CORS &amp; Origin Filter</text>
+              <text x="294" y="188" fill="#71717a" font-family="'Geist Mono', monospace" font-size="9.5">github.io &amp;
+                localhost</text>
+
+              <!-- Middleware 3: Warmup Sentinel -->
+              <rect x="282" y="206" width="196" height="42" rx="4" fill="#18181b" stroke="#27272a" stroke-width="1" />
+              <text x="294" y="223" fill="#e4e4e7" font-family="'Inter', sans-serif" font-size="11"
+                font-weight="500">Boot Warmup Sentinel</text>
+              <text x="294" y="238" fill="#71717a" font-family="'Geist Mono', monospace" font-size="9.5">Non-blocking
+                Thread Pool</text>
+
+              <!-- Middleware 4: Prefix Dispatcher -->
+              <rect x="282" y="256" width="196" height="50" rx="4" fill="#141417" stroke="#38bdf8" stroke-width="1"
+                stroke-opacity="0.4" />
+              <text x="294" y="274" fill="#38bdf8" font-family="'Inter', sans-serif" font-size="11"
+                font-weight="600">Path Prefix Router</text>
+              <text x="294" y="291" fill="#a1a1aa" font-family="'Geist Mono', monospace" font-size="9.5">Zero-Copy
+                In-Memory Mount</text>
+
+              <!-- Connectors: Gateway -> Prefix Rows (Strict Horizontal Ingress) -->
+              <path d="M 490 274 H 506 C 514 274, 514 90, 522 90 H 534" stroke="#71717a" stroke-width="1.5"
+                marker-end="url(#arrow)" fill="none" />
+              <path d="M 490 281 H 508 C 514 281, 514 185, 520 185 H 534" stroke="#34d399" stroke-width="1.5"
+                marker-end="url(#arrow-green)" fill="none" />
+              <path d="M 490 288 H 508 C 514 288, 514 280, 520 280 H 534" stroke="#38bdf8" stroke-width="1.5"
+                marker-end="url(#arrow-blue)" fill="none" />
+
+              <!-- COLUMN 3: ROUTE PREFIXES -->
+              <!-- Prefix 1 -->
+              <rect x="540" y="66" width="115" height="48" rx="4" fill="#18181b" stroke="#3f3f46" stroke-width="1" />
+              <text x="550" y="85" fill="#fafafa" font-family="'Geist Mono', monospace" font-size="11"
+                font-weight="600">/</text>
+              <text x="550" y="101" fill="#71717a" font-family="'Geist Mono', monospace" font-size="9.5">/health,
+                /status</text>
+
+              <!-- Prefix 2 -->
+              <rect x="540" y="161" width="115" height="48" rx="4" fill="#18181b" stroke="rgba(16, 185, 129, 0.4)"
+                stroke-width="1" />
+              <text x="550" y="180" fill="#34d399" font-family="'Geist Mono', monospace" font-size="11"
+                font-weight="600">/heartflow/*</text>
+              <text x="550" y="196" fill="#71717a" font-family="'Geist Mono', monospace" font-size="9.5">Vitals &amp;
+                TinyML</text>
+
+              <!-- Prefix 3 -->
+              <rect x="540" y="256" width="115" height="48" rx="4" fill="#18181b" stroke="rgba(56, 189, 248, 0.4)"
+                stroke-width="1" />
+              <text x="550" y="275" fill="#38bdf8" font-family="'Geist Mono', monospace" font-size="11"
+                font-weight="600">/semantic/*</text>
+              <text x="550" y="291" fill="#71717a" font-family="'Geist Mono', monospace" font-size="9.5">NLP &amp;
+                Embeddings</text>
+
+              <!-- Connectors: Prefixes -> Subproject Packages -->
+              <line x1="655" y1="90" x2="695" y2="90" stroke="#71717a" stroke-width="1.5" marker-end="url(#arrow)" />
+              <line x1="655" y1="185" x2="695" y2="185" stroke="#34d399" stroke-width="1.5"
+                marker-end="url(#arrow-green)" />
+              <line x1="655" y1="280" x2="695" y2="280" stroke="#38bdf8" stroke-width="1.5"
+                marker-end="url(#arrow-blue)" />
+
+              <!-- COLUMN 4: MOUNTED SUBPROJECT PACKAGES -->
+              <!-- Subproject 1: Host Root -->
+              <rect x="700" y="55" width="205" height="70" rx="6" fill="#141417" stroke="#3f3f46" stroke-width="1.2" />
+              <text x="714" y="77" fill="#fafafa" font-family="'Inter', sans-serif" font-size="12" font-weight="600">HF
+                Backend Gateway</text>
+              <text x="714" y="94" fill="#a1a1aa" font-family="'Geist Mono', monospace" font-size="10">main.py (Root
+                Host)</text>
+              <text x="714" y="111" fill="#71717a" font-family="'Inter', sans-serif" font-size="10">FastAPI Swagger UI
+                &amp; Probes</text>
+
+              <!-- Subproject 2: HeartFlow OS -->
+              <rect x="700" y="150" width="205" height="70" rx="6" fill="#141417" stroke="rgba(16, 185, 129, 0.4)"
+                stroke-width="1.2" />
+              <text x="714" y="172" fill="#fafafa" font-family="'Inter', sans-serif" font-size="12"
+                font-weight="600">HEARTFLOW_OS</text>
+              <text x="714" y="189" fill="#34d399" font-family="'Geist Mono', monospace"
+                font-size="10">heartflow-backend </text>
+              <text x="714" y="206" fill="#71717a" font-family="'Inter', sans-serif" font-size="10">5 Model Ensamble
+                &amp;
+                SHAP Explainer</text>
+
+              <!-- Subproject 3: Semantic Analyzer -->
+              <rect x="700" y="245" width="205" height="70" rx="6" fill="#141417" stroke="rgba(56, 189, 248, 0.4)"
+                stroke-width="1.2" />
+              <text x="714" y="267" fill="#fafafa" font-family="'Inter', sans-serif" font-size="12"
+                font-weight="600">Semantic Comment Analyze</text>
+              <text x="714" y="284" fill="#38bdf8" font-family="'Geist Mono', monospace"
+                font-size="10">semantic-backend</text>
+              <text x="714" y="301" fill="#71717a" font-family="'Inter', sans-serif" font-size="10">MiniLM-L6-v2 &amp;
+                Toxicity NLP</text>
+
+              <!-- BOTTOM ANNOTATION BAR -->
+              <rect x="270" y="338" width="635" height="50" rx="4" fill="#141417" stroke="#27272a" stroke-width="1" />
+              <circle cx="288" cy="363" r="4" fill="#34d399" />
+              <text x="302" y="358" fill="#e4e4e7" font-family="'Inter', sans-serif" font-size="11"
+                font-weight="500">In-Memory Router Mounting &bull; No HTTP Intermediary</text>
+              <text x="302" y="375" fill="#71717a" font-family="'Inter', sans-serif" font-size="10">Direct FastAPI
+                include_router() registration eliminates inter-service serialization latency and network
+                timeouts.</text>
+            </svg>
+          </div>
+
+          <!-- Senior Dev Architectural Commentary -->
+          <div class="sys-notes-grid">
+            <div class="sys-note-item">
+              <span class="sys-note-label">1. Container Packing vs Microservices</span>
+              <p class="sys-note-body">
+                Free-tier Hugging Face Spaces sleep after periods of inactivity. Deploying each subproject to an
+                isolated Space multiplies cold starts and introduces 80–120ms of cross-space network latency. Packing
+                standalone Python packages into a single container uses the full 16 GB memory allocation, shares the
+                PyTorch runtime, and routes requests in memory.
+              </p>
+            </div>
+
+            <div class="sys-note-item">
+              <span class="sys-note-label">2. Prefix-Based Fault Isolation</span>
+              <p class="sys-note-body">
+                Subprojects install from git tags into the Python environment and expose independent router instances.
+                The gateway attaches them under explicit path prefixes (<code class="inline-code">/heartflow</code>,
+                <code class="inline-code">/semantic</code>). If an upstream dependency fails during import or warmup,
+                the gateway logs the traceback, reports degraded health, and continues serving the remaining
+                subprojects.
+              </p>
+            </div>
+
+            <div class="sys-note-item">
+              <span class="sys-note-label">3. Streaming Ingress Guards</span>
+              <p class="sys-note-body">
+                Before reaching router handlers, incoming requests pass through Starlette middleware that counts raw
+                stream bytes in chunks. Oversized payloads reject immediately at 10 MB with HTTP 413, preventing
+                unbounded memory allocation from exhausting the container RAM or stalling the event loop.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Clean, Tactile Footer -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-left">
+        <span class="footer-brand">HF Backend</span>
+        <span class="footer-copy">&copy; 2026 Rachit Mangawa &bull; Licensed under Apache 2.0</span>
+      </div>
+      <div class="footer-right">
+        <a href="https://idkhowtocodefr-hf-backend.hf.space/project" target="_blank" rel="noopener noreferrer">FastAPI
+          Swagger
+          Docs</a>
+        <a href="https://github.com/rachit-mangawa/hf-backend" target="_blank" rel="noopener noreferrer">GitHub
+          Source</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Script -->
+  <script src="js/app.js"></script>
+</body>
+
+</html>

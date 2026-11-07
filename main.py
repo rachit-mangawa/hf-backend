@@ -6,11 +6,13 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import FileResponse, HTMLResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from dashboard import render_statuspage
@@ -150,16 +152,22 @@ app.add_middleware(RequestLimitMiddleware, max_size=max_body_size, timeout=reque
 raw_origins = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
 default_origins = [
     "http://localhost:3000",
+    "http://localhost:5000",
     "http://localhost:5173",
+    "http://localhost:8000",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:5000",
     "http://127.0.0.1:5173",
+    "http://127.0.0.1:8000",
     "https://heartflow.vercel.app",
+    "https://rachit-mangawa.github.io",
 ]
 allowed_origins = [o for o in (raw_origins or default_origins) if o != "*"]
 if allowed_origins:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
+        allow_origin_regex=r"^https://.*\.github\.io$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -238,6 +246,13 @@ def root(request: Request, format: str | None = None):
     wants_html = format == "html" or ("text/html" in accept and not accept.startswith("*/*"))
     if format == "json" or not wants_html:
         return health()
+    if enable_docs:
+        return get_swagger_ui_html(
+            openapi_url=app.openapi_url or "/openapi.json",
+            title=f"{app.title} - Documentation",
+            swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+            swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
+        )
     return HTMLResponse(
         content=render_statuspage(
             health(),

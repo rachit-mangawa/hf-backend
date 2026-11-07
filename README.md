@@ -21,9 +21,10 @@ Read [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-
 
 | Resource | Path | Description |
 | :--- | :--- | :--- |
-| Interactive API docs | [`/project`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L112) | Swagger UI documenting all mounted subproject routes |
-| Developer console | [`/status`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L189) | Real-time status console with endpoint explorer and cURL snippets |
-| Health endpoint | [`/health`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L168) | Machine-readable JSON health and readiness payload |
+| Interactive API docs | [`/` or `/project`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L236) | Swagger UI documenting all mounted subproject routes |
+| Frontend Portal | [`frontend/`](frontend/index.html) | Interactive showcase deployed to GitHub Pages |
+| Developer console | [`/status`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L220) | Real-time status console with endpoint explorer and cURL snippets |
+| Health endpoint | [`/health`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L201) | Machine-readable JSON health and readiness payload |
 | OpenAPI schema | `/openapi.json` | OpenAPI 3.1 specification |
 
 ---

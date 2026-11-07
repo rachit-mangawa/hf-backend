@@ -1,0 +1,69 @@
+name: Weekly Package Rebuild & Dependency Scan
+
+on:
+  schedule:
+    # Runs every 7 days (Sunday at 00:00 UTC)
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Update mode: 'auto' (detect newer tags/commits), 'tags' (newest semver tag), or 'commits' (latest main commit)"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - "auto"
+          - "tags"
+          - "commits"
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-rebuild:
+    name: Scan & Rebuild Upstream Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Scan & Update Git Dependencies
+        id: updater
+        run: |
+          MODE="${{ github.event.inputs.mode || 'auto' }}"
+          python scripts/update_dependencies.py --mode="$MODE"
+
+      - name: Run Test Suite (Quality Gate)
+        if: steps.updater.outputs.has_changes == 'true'
+        run: |
+          uv pip install --system pytest -r requirements.txt
+          pytest tests -k "not test_real_registry" -v
+
+      - name: Commit and Push Changes
+        if: steps.updater.outputs.has_changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "github-actions[bot]"
+          git add requirements.in requirements.txt
+          SUMMARY="${{ steps.updater.outputs.changes_summary || 'bump upstream packages' }}"
+          git commit -m "chore(deps): auto-update upstream packages ($SUMMARY)"
+          git push origin main
+          echo "Changes pushed to main. This will trigger deploy.yml to update Hugging Face Space."
+
+      - name: No Updates Needed
+        if: steps.updater.outputs.has_changes != 'true'
+        run: |
+          echo "All packages are up to date. No rebuild needed."
+

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18181c" />
+      <stop offset="100%" stop-color="#27272a" />
+    </linearGradient>
+  </defs>
+  <!-- Background Tile -->
+  <rect x="1" y="1" width="30" height="30" rx="7" fill="url(#brandGrad)" stroke="#3f3f46" stroke-width="1.2" />
+  <!-- Inset Highlight -->
+  <rect x="2" y="2" width="28" height="28" rx="6" fill="none" stroke="rgba(255, 255, 255, 0.08)" stroke-width="1" />
+  <!-- Center Lightning Bolt (Lucide/Feather Zap Icon) -->
+  <g transform="translate(4, 4)">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="none" stroke="#fafafa" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>
