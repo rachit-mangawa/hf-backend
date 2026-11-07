@@ -44,8 +44,17 @@ jobs:
             echo "Create response: $CREATE_RES"
           fi
 
+          echo "Preparing clean backend deployment for Hugging Face Space..."
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create an isolated orphan branch containing strictly backend files
+          git checkout --orphan hf-sync
+          git rm -rf --cached frontend/ scripts/ .github/ 2>/dev/null || true
+          git commit -m "deploy: sync backend to huggingface space [skip ci]"
+
           echo "Syncing code to Hugging Face Space: $SPACE_REPO..."
-          git push "https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${SPACE_REPO}" main:main --force
+          git push "https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${SPACE_REPO}" hf-sync:main --force
 
           echo "Triggering Space restart..."
           curl -f -s -X POST "https://huggingface.co/api/spaces/${SPACE_REPO}/restart" \
