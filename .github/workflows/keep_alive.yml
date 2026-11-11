@@ -3,12 +3,7 @@ name: Space Keep Alive
 on:
   schedule:
     # 30-hour intervals across the week (HF Space sleeps after 48h of inactivity):
-    - cron: "0 0 * * 0"   # Sun 00:00 UTC
-    - cron: "0 6 * * 1"   # Mon 06:00 UTC (+30h)
-    - cron: "0 12 * * 2"  # Tue 12:00 UTC (+30h)
-    - cron: "0 18 * * 3"  # Wed 18:00 UTC (+30h)
-    - cron: "0 0 * * 5"   # Fri 00:00 UTC (+30h)
-    - cron: "0 6 * * 6"   # Sat 06:00 UTC (+30h)
+    - cron: "* */24 * * *" 
   workflow_dispatch:
 
 jobs:
