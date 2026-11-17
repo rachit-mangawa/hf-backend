@@ -171,6 +171,16 @@ Visiting the root `/` or `/status` renders the developer console. It dynamically
 
 ---
 
+## Automated keep-alive & Space lifecycle
+
+Free Hugging Face Spaces sleep after 48 hours of idle time without inbound HTTP requests. To maintain continuous readiness and eliminate cold-start warmup latency:
+
+* `.github/workflows/keep_alive.yml` sends an automated GET request to `/health` every 12 hours (`15 */12 * * *` at 00:15 and 12:15 UTC).
+* **Fault-tolerant cadence**: A 12-hour interval provides multiple failure-recovery windows within the 48-hour sleep threshold, protecting against GitHub Actions scheduler delays or temporary runner blips while consuming negligible CI runner minutes (~15 min/month).
+* **Transient error retry**: The workflow leverages `curl --retry 3 --retry-delay 5 --retry-connrefused` to absorb brief host spin-ups or transient network blips without failing the workflow.
+
+---
+
 ## Local development
 
 ```bash

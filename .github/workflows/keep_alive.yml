@@ -2,12 +2,16 @@ name: Space Keep Alive
 
 on:
   schedule:
-    # 30-hour intervals across the week (HF Space sleeps after 48h of inactivity):
-    - cron: "* */24 * * *" 
+    # 12-hour intervals (00:15 and 12:15 UTC):
+    # Free Hugging Face Spaces sleep after 48h of inactivity.
+    # Running every 12 hours provides multiple retry windows (resilient to GitHub Actions
+    # scheduler delays and transient network blips) while consuming negligible runner minutes (~15 min/month).
+    - cron: "15 */12 * * *"
   workflow_dispatch:
 
 jobs:
   ping:
+    name: Ping Health Endpoint
     runs-on: ubuntu-latest
     steps:
       - name: Ping Health Endpoint
@@ -18,5 +22,10 @@ jobs:
           fi
 
           echo "Sending keep-alive ping to ${TARGET_URL}..."
-          curl --fail --show-error --silent --max-time 30 "$TARGET_URL" || exit 1
+          curl --fail --show-error --silent \
+            --retry 3 --retry-delay 5 --retry-connrefused \
+            --max-time 30 \
+            "$TARGET_URL"
+          echo ""
           echo "Keep-alive ping successful."
+

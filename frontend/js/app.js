@@ -3,11 +3,14 @@
  * Built with Emil Kowalski design engineering principles:
  * - Direct, tactile feedback (< 140ms response states)
  * - Clean method-coded operation bars (GET in blue, POST in green)
- * - Pre-filled sample payloads (zero manual form configuration required)
+ * - True-to-life production payloads matching live Hugging Face Space contracts
  * - Live request execution with direct timing & status feedback
  */
 
-const BASE_URL = "https://idkhowtocodefr-hf-backend.hf.space";
+const DEFAULT_BASE_URL = "https://idkhowtocodefr-hf-backend.hf.space";
+const BASE_URL = (typeof window !== "undefined" && window.location.hostname.endsWith(".hf.space"))
+  ? window.location.origin
+  : DEFAULT_BASE_URL;
 
 const GATEWAYS = {
   "hf-backend": {
@@ -23,17 +26,58 @@ const GATEWAYS = {
         samplePayload: null,
         sampleResponse: {
           "status": "healthy",
-          "timestamp": "2026-11-07T12:00:00Z",
-          "uptime_seconds": 108420.5,
-          "subprojects": {
-            "/heartflow": {
-              "status": "healthy",
-              "warmed": true
-            },
-            "/semantic": {
-              "status": "healthy",
-              "warmed": true
-            }
+          "loaded": {
+            "/semantic": "semantic_backend.router:router",
+            "/heartflow": "heartflow_backend.router:router"
+          },
+          "failed": {},
+          "warm_status": {
+            "/semantic": "warmed",
+            "/heartflow": "warmed"
+          },
+          "total_warmup_seconds": 5.328
+        }
+      },
+      {
+        id: "hf-root",
+        method: "GET",
+        path: "/?format=json",
+        summary: "Gateway Root & Status Telemetry",
+        description: "Root gateway entrypoint. When queried with format=json (or Accept: application/json), returns core health and loaded route prefixes.",
+        samplePayload: null,
+        sampleResponse: {
+          "status": "healthy",
+          "loaded": {
+            "/semantic": "semantic_backend.router:router",
+            "/heartflow": "heartflow_backend.router:router"
+          },
+          "failed": {},
+          "warm_status": {
+            "/semantic": "warmed",
+            "/heartflow": "warmed"
+          },
+          "total_warmup_seconds": 5.328
+        }
+      },
+      {
+        id: "hf-openapi",
+        method: "GET",
+        path: "/openapi.json",
+        summary: "OpenAPI 3.1 Specification",
+        description: "Dynamically generated OpenAPI schema documenting all mounted subproject routes, parameters, and schemas.",
+        samplePayload: null,
+        sampleResponse: {
+          "openapi": "3.1.0",
+          "info": {
+            "title": "HF Backend Gateway",
+            "description": "Pluggable aggregation gateway for independent Python microservices.",
+            "version": "1.0.0"
+          },
+          "paths": {
+            "/health": { "get": { "tags": ["Host Gateway"], "summary": "Health" } },
+            "/status": { "get": { "tags": ["Host Gateway"], "summary": "Status Page" } },
+            "/heartflow/predict": { "post": { "tags": ["HeartFlow OS"], "summary": "Predict" } },
+            "/semantic/analyze": { "post": { "tags": ["Semantic Comment Analyzer"], "summary": "Analyze Text" } }
           }
         }
       },
@@ -41,38 +85,11 @@ const GATEWAYS = {
         id: "hf-status",
         method: "GET",
         path: "/status",
-        summary: "Subproject Routing Table & Metadata",
-        description: "Introspects registered route paths, mounted upstream packages, and gateway middleware boundaries.",
+        responseType: "html",
+        summary: "Developer Console (HTML Dashboard)",
+        description: "Renders the interactive web status console with live latency, active middleware caps, and route explorer.",
         samplePayload: null,
-        sampleResponse: {
-          "gateway": "HF Backend Hub",
-          "version": "1.0.0",
-          "active_subprojects": [
-            {
-              "prefix": "/heartflow",
-              "package": "heartflow-backend",
-              "status": "mounted"
-            },
-            {
-              "prefix": "/semantic",
-              "package": "semantic-backend",
-              "status": "mounted"
-            }
-          ]
-        }
-      },
-      {
-        id: "hf-root",
-        method: "GET",
-        path: "/",
-        summary: "Gateway Root & OpenAPI Redirect",
-        description: "Root gateway endpoint; serves Swagger UI HTML to browser requests and JSON health payload to automated probes.",
-        samplePayload: null,
-        sampleResponse: {
-          "message": "HF Backend Gateway Operational",
-          "docs": "/project",
-          "openapi": "/openapi.json"
-        }
+        sampleResponse: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <title>HF Backend Gateway Status</title>\n  <!-- Interactive Status Dashboard -->\n</head>\n<body>\n  <header>HF Backend Gateway &bull; Live Telemetry</header>\n</body>\n</html>"
       }
     ]
   },
@@ -84,25 +101,47 @@ const GATEWAYS = {
         id: "heartflow-predict",
         method: "POST",
         path: "/heartflow/predict",
-        summary: "Real-Time Arrhythmia Risk Prediction",
-        description: "Evaluates patient telemetry vitals to classify cardiac rhythm risk and compute diagnostic confidence.",
+        summary: "Arrhythmia & Disease Risk Ensemble",
+        description: "Evaluates patient telemetry vitals through a weighted 5-model ensemble (Random Forest, Small NN, Logistic Regression, KNN, SVM) to classify risk.",
         samplePayload: {
-          "Heart_Rate": 84,
+          "Heart_Rate": 84.0,
           "SpO2_Level": 98.2,
-          "Systolic_BP": 122,
-          "Diastolic_BP": 79,
+          "Systolic_BP": 122.0,
+          "Diastolic_BP": 79.0,
           "Body_Temp": 36.8
         },
         sampleResponse: {
-          "prediction": "Normal Sinus Rhythm",
-          "risk_score": 0.082,
-          "confidence": 0.941,
-          "telemetry_evaluated": {
-            "Heart_Rate": 84,
-            "SpO2_Level": 98.2,
-            "Systolic_BP": 122,
-            "Diastolic_BP": 79,
-            "Body_Temp": 36.8
+          "prediction": false,
+          "prediction_label": "Healthy",
+          "probability": 0.9134,
+          "ensemble_prediction": false,
+          "model_outputs": {
+            "knn": "Healthy",
+            "svm": "Healthy",
+            "logreg": "Healthy",
+            "rf": "Healthy",
+            "small_nn": "Healthy"
+          },
+          "model_probs": {
+            "knn": 1.0,
+            "svm": 0.9985,
+            "logreg": 0.9396,
+            "rf": 0.7029,
+            "small_nn": 0.9999
+          },
+          "disease_probs": {
+            "Healthy": 0.9134,
+            "Diabetes Mellitus": 0.0838,
+            "Hypertension": 0.0023,
+            "Asthma": 0.0003,
+            "Heart Disease": 0.0002
+          },
+          "weights": {
+            "knn": 0.15,
+            "svm": 0.15,
+            "logreg": 0.2,
+            "rf": 0.25,
+            "small_nn": 0.25
           }
         }
       },
@@ -111,52 +150,106 @@ const GATEWAYS = {
         method: "POST",
         path: "/heartflow/explain",
         summary: "Clinical Feature Attribution & SHAP Weights",
-        description: "Computes physiological feature importances and diagnostic explanations for patient telemetry.",
+        description: "Computes physiological feature attribution scores and directional risk impacts for each patient telemetry vital.",
         samplePayload: {
-          "Heart_Rate": 115,
+          "Heart_Rate": 115.0,
           "SpO2_Level": 93.5,
-          "Systolic_BP": 148,
-          "Diastolic_BP": 95,
+          "Systolic_BP": 148.0,
+          "Diastolic_BP": 95.0,
           "Body_Temp": 38.2
         },
         sampleResponse: {
-          "prediction": "Tachycardia / Elevated Risk",
-          "risk_score": 0.74,
-          "attributions": {
-            "Heart_Rate": 0.42,
-            "Systolic_BP": 0.28,
-            "SpO2_Level": -0.18,
-            "Body_Temp": 0.12
-          }
+          "shap_values": [
+            0.1503,
+            0.0529,
+            -0.0211,
+            0.1560,
+            0.1114,
+            0.0538
+          ],
+          "feature_names": [
+            "Heart Rate (bpm)",
+            "SpO2 Level (%)",
+            "Systolic Blood Pressure (mmHg)",
+            "Diastolic Blood Pressure (mmHg)",
+            "Body Temperature (°C)",
+            "Risk_Severity"
+          ]
         }
       },
       {
         id: "heartflow-metrics",
         method: "GET",
         path: "/heartflow/metrics",
-        summary: "Model Validation & Confusion Matrix Metrics",
-        description: "Returns offline validation metrics, classification accuracy, AUC-ROC, and inference latencies.",
+        summary: "Ensemble Validation & Classification Metrics",
+        description: "Returns offline validation metrics, classification accuracy, macro F1, and edge inference latency benchmarks.",
         samplePayload: null,
         sampleResponse: {
-          "model": "RandomForest-Classifier",
-          "accuracy": 0.923,
-          "f1_score": 0.918,
-          "auc_roc": 0.964,
-          "evaluation_samples": 450
+          "ensemble_accuracy": 0.962,
+          "ensemble_f1_macro": 0.948,
+          "latency_microsec_edge": 18.4,
+          "latency_is_estimated": true,
+          "models": {
+            "rf": { "accuracy": 0.954, "f1": 0.938, "weight": 0.25 },
+            "small_nn": { "accuracy": 0.949, "f1": 0.931, "weight": 0.25 },
+            "logreg": { "accuracy": 0.922, "f1": 0.904, "weight": 0.2 },
+            "knn": { "accuracy": 0.918, "f1": 0.897, "weight": 0.15 },
+            "svm": { "accuracy": 0.935, "f1": 0.912, "weight": 0.15 }
+          }
+        }
+      },
+      {
+        id: "heartflow-dataset",
+        method: "GET",
+        path: "/heartflow/dataset?limit=2",
+        summary: "Clinical Telemetry Sample Explorer",
+        description: "Queries paginated observations from the 60,000-record patient telemetry dataset.",
+        samplePayload: null,
+        sampleResponse: {
+          "total": 60000,
+          "page": 1,
+          "limit": 2,
+          "total_pages": 30000,
+          "features": [
+            "Patient Number",
+            "Heart Rate (bpm)",
+            "SpO2 Level (%)",
+            "Systolic Blood Pressure (mmHg)",
+            "Diastolic Blood Pressure (mmHg)",
+            "Body Temperature (°C)",
+            "Fall Detection",
+            "Predicted Disease",
+            "Data Accuracy (%)",
+            "Heart Rate Alert",
+            "SpO2 Level Alert",
+            "Blood Pressure Alert",
+            "Temperature Alert"
+          ],
+          "rows": [
+            {
+              "Patient Number": 1,
+              "Heart Rate (bpm)": 98,
+              "SpO2 Level (%)": 96,
+              "Systolic Blood Pressure (mmHg)": 120,
+              "Diastolic Blood Pressure (mmHg)": 86,
+              "Body Temperature (°C)": 38.1,
+              "Fall Detection": "No",
+              "Predicted Disease": "Diabetes Mellitus",
+              "Data Accuracy (%)": 95,
+              "Heart Rate Alert": "NORMAL"
+            }
+          ]
         }
       },
       {
         id: "heartflow-tinyml",
         method: "GET",
-        path: "/heartflow/export_tinyml",
-        summary: "TinyML C++ Header Export",
-        description: "Compiles trained decision tree arrays into a standalone C++ header for ESP32 and Arduino microcontrollers.",
+        path: "/heartflow/export_tinyml?model_name=rf&quantize=false",
+        summary: "TinyML C99 Header Export",
+        description: "Compiles trained decision tree arrays into a standalone zero-malloc C99 header for ESP32 and Arduino microcontrollers.",
         samplePayload: null,
         sampleResponse: {
-          "format": "cpp_header",
-          "filename": "heartflow_tinyml.h",
-          "byte_size": 14280,
-          "preview": "// Auto-generated HeartFlow TinyML model\nconst float weights[5] = {0.21, 0.34, 0.15, 0.18, 0.12};"
+          "code": "// HeartFlow OS TinyML C99 · Model: RF (FP32 Single-Precision) · Zero-Malloc · Static RAM: <64B\n#ifndef HEARTFLOW_MODEL_H\n#define HEARTFLOW_MODEL_H\n\n#include <stdint.h>\n#include <math.h>\n#include <string.h>\n\n#define N_CLASSES 5\n#define N_RAW_FEATURES 5\n#define N_SCALED_FEATURES 6\n// Model tree definitions...\n#endif"
         }
       },
       {
@@ -164,12 +257,19 @@ const GATEWAYS = {
         method: "GET",
         path: "/heartflow/health",
         summary: "HeartFlow Runtime Readiness",
-        description: "Checks model weight warmups and memory residency.",
+        description: "Confirms in-memory model weight warmups across all 5 ensemble classifiers.",
         samplePayload: null,
         sampleResponse: {
-          "status": "healthy",
-          "model_loaded": true,
-          "package": "heartflow-backend"
+          "status": "Healthy",
+          "models_loaded": true,
+          "models": {
+            "knn": true,
+            "svm": true,
+            "logreg": true,
+            "rf": true,
+            "small_nn": true
+          },
+          "retrain_enabled": true
         }
       }
     ]
@@ -182,57 +282,82 @@ const GATEWAYS = {
         id: "semantic-analyze",
         method: "POST",
         path: "/semantic/analyze",
-        summary: "Multi-Label NLP Toxicity & Sentiment Analysis",
-        description: "Runs transformer inference to detect toxicity, polarity, and intent from text feedback.",
+        summary: "NLP Sentiment, Intent & Token Explainability",
+        description: "Runs RoBERTa embeddings to detect intent classes (Praise, Complaint, Question, Feature Request, Bug Report), polarity, tone, urgency, and token-level attribution.",
         samplePayload: {
           "text": "Great API integration, lightweight and response times are extremely fast.",
           "threshold": 0.5,
           "include_explanation": true
         },
         sampleResponse: {
-          "sentiment": "positive",
-          "polarity_score": 0.89,
-          "toxicity": {
-            "toxic": false,
-            "severe_toxic": false,
-            "insult": false,
-            "confidence": 0.012
+          "intent": {
+            "labels": [
+              "Praise"
+            ],
+            "scores": [
+              0.8067
+            ],
+            "all_intents": {
+              "Praise": 0.8067,
+              "Feature Request": 0.0751,
+              "Complaint": 0.0592,
+              "Question": 0.0523,
+              "Bug Report": 0.0067
+            },
+            "top_intent": "Praise",
+            "top_confidence": 0.8067
           },
-          "inference_latency_ms": 14.8
+          "sentiment": {
+            "label": "POSITIVE",
+            "score": 0.9774
+          },
+          "explainability": [
+            {
+              "word": "Great",
+              "contribution": 0.2263,
+              "primary_intent": "Praise"
+            },
+            {
+              "word": "lightweight",
+              "contribution": 0.0722,
+              "primary_intent": "Praise"
+            },
+            {
+              "word": "fast.",
+              "contribution": 0.1009,
+              "primary_intent": "Praise"
+            }
+          ],
+          "tone": "Appreciative",
+          "urgency": "Low",
+          "recommended_action": "Share with Team"
         }
       },
       {
         id: "semantic-batch",
         method: "POST",
         path: "/semantic/batch",
-        summary: "Batch Text NLP Inference",
-        description: "Evaluates multiple comments in a vectorized batch operation.",
-        samplePayload: {
-          "texts": [
-            "Outstanding gateway performance and zero downtime.",
-            "Needs more documentation on endpoint rate limits."
-          ],
-          "threshold": 0.5
-        },
-        sampleResponse: {
-          "processed_count": 2,
-          "results": [
-            { "sentiment": "positive", "score": 0.94 },
-            { "sentiment": "neutral", "score": 0.48 }
-          ]
-        }
+        contentType: "multipart/form-data",
+        summary: "Streaming CSV Batch Analysis",
+        description: "Streams CSV comment datasets through the NLP inference pipeline, returning a classified CSV with intent, sentiment, tone, and action recommendations.",
+        samplePayload: "text\nGreat API integration, lightweight and fast.\nNeeds more documentation on endpoint rate limits.\nSlow response times under high concurrency.",
+        sampleResponse: "TEXT,INTENT,CONFIDENCE,SENTIMENT,SENTIMENT_SCORE,TONE,URGENCY,RECOMMENDED_ACTION\n\"Great API integration, lightweight and fast.\",Praise,0.94,POSITIVE,0.95,Appreciative,Low,Share with Team\n\"Needs more documentation on endpoint rate limits.\",Question,0.68,NEUTRAL,0.52,Objective,Medium,Route to Support\n\"Slow response times under high concurrency.\",Complaint,0.88,NEGATIVE,0.91,Critical,High,Escalate to Engineering"
       },
       {
         id: "semantic-health",
         method: "GET",
         path: "/semantic/health",
-        summary: "Semantic Analyzer Service Readiness",
-        description: "Confirms SentenceTransformer weights and tokenizers are ready in RAM.",
+        summary: "Semantic Service Readiness",
+        description: "Confirms Transformer model embeddings, classifier heads, and sentiment pipelines are resident in RAM.",
         samplePayload: null,
         sampleResponse: {
           "status": "healthy",
-          "service": "semantic-analyzer",
-          "device": "cpu"
+          "service": "semantic_backend",
+          "models_loaded": {
+            "embedding": true,
+            "classifier_head": true,
+            "sentiment": true
+          }
         }
       }
     ]
@@ -308,10 +433,22 @@ function renderOperations() {
 
   container.innerHTML = gw.endpoints.map(ep => {
     const isPost = ep.method === "POST";
+    const isMultipart = ep.contentType === "multipart/form-data";
     const methodLower = ep.method.toLowerCase();
     const isOpen = openedOperations.has(ep.id);
-    const samplePayloadStr = ep.samplePayload ? JSON.stringify(ep.samplePayload, null, 2) : "";
-    const sampleResponseStr = JSON.stringify(ep.sampleResponse, null, 2);
+    const samplePayloadStr = ep.samplePayload
+      ? (typeof ep.samplePayload === "string" ? ep.samplePayload : JSON.stringify(ep.samplePayload, null, 2))
+      : "";
+    const sampleResponseStr = typeof ep.sampleResponse === "string"
+      ? ep.sampleResponse
+      : JSON.stringify(ep.sampleResponse, null, 2);
+
+    let contentTypeLabel = "No Body";
+    if (isMultipart) {
+      contentTypeLabel = "multipart/form-data (CSV)";
+    } else if (isPost) {
+      contentTypeLabel = "application/json";
+    }
 
     return `
       <div class="op-card op-method-${methodLower} ${isOpen ? 'is-open' : ''}" id="op-${ep.id}">
@@ -343,13 +480,13 @@ function renderOperations() {
             <div class="op-col op-req-col">
               <div class="op-col-header">
                 <span class="op-col-title">Parameters & Request Body</span>
-                ${isPost ? '<span class="op-content-type">application/json</span>' : '<span class="op-content-type">No Body</span>'}
+                <span class="op-content-type">${contentTypeLabel}</span>
               </div>
 
-              ${isPost ? `
+              ${(isPost || isMultipart) ? `
                 <div class="op-editor-box">
-                  <label for="payload-${ep.id}" class="sr-only">Request Payload JSON</label>
-                  <textarea id="payload-${ep.id}" class="op-payload-textarea" spellcheck="false">${samplePayloadStr}</textarea>
+                  <label for="payload-${ep.id}" class="sr-only">${isMultipart ? 'CSV Content' : 'Request Payload JSON'}</label>
+                  <textarea id="payload-${ep.id}" class="op-payload-textarea" spellcheck="false">${escapeHtml(samplePayloadStr)}</textarea>
                 </div>
               ` : `
                 <div class="op-no-params-box">
@@ -377,7 +514,7 @@ function renderOperations() {
                   </svg>
                   <span>Copy cURL</span>
                 </button>
-                ${isPost ? `
+                ${(isPost || isMultipart) ? `
                   <button type="button" class="btn btn-ghost btn-xs" onclick="resetEndpointPayload('${ep.id}')">
                     <span>Reset</span>
                   </button>
@@ -388,11 +525,19 @@ function renderOperations() {
             <!-- Response Column -->
             <div class="op-col op-resp-col">
               <div class="op-col-header">
-                <span class="op-col-title">Responses</span>
-                <span class="op-status-sample">Expected 200 OK</span>
+                <div class="op-resp-tabs" role="tablist">
+                  <button type="button" class="op-resp-tab active" id="tab-sample-${ep.id}" onclick="setResponseTab('${ep.id}', 'sample')">
+                    Sample Contract
+                  </button>
+                  <button type="button" class="op-resp-tab" id="tab-live-${ep.id}" onclick="setResponseTab('${ep.id}', 'live')" style="display: none;">
+                    <span class="live-dot"></span>
+                    <span id="tab-live-label-${ep.id}">Live Response</span>
+                  </button>
+                </div>
+                <span class="op-status-sample" id="resp-status-${ep.id}">Expected 200 OK</span>
               </div>
 
-              <!-- Live Server Response (Appears once executed) -->
+              <!-- Live Server Response (Shown when executed) -->
               <div class="op-live-box" id="live-box-${ep.id}" style="display: none;">
                 <div class="op-live-bar">
                   <div class="op-live-status-pill" id="live-pill-${ep.id}">
@@ -400,22 +545,32 @@ function renderOperations() {
                     <span id="live-code-${ep.id}">200 OK</span>
                   </div>
                   <span class="op-live-time" id="live-time-${ep.id}">~18ms</span>
-                  <button type="button" class="op-mini-copy" onclick="copyLiveResponse('${ep.id}')" title="Copy response JSON">
-                    Copy
-                  </button>
+                  <div class="op-live-actions">
+                    <button type="button" class="op-view-toggle-btn" onclick="setResponseTab('${ep.id}', 'sample')" title="View sample response schema">
+                      View Sample
+                    </button>
+                    <button type="button" class="op-mini-copy" onclick="copyLiveResponse('${ep.id}')" title="Copy response">
+                      Copy
+                    </button>
+                  </div>
                 </div>
                 <pre class="op-code-pre"><code id="live-output-${ep.id}"></code></pre>
               </div>
 
-              <!-- Sample Response Documentation -->
+              <!-- Sample Response Documentation (Default view) -->
               <div class="op-sample-box" id="sample-box-${ep.id}">
                 <div class="op-sample-bar">
-                  <span class="op-sample-label">Sample Response (application/json):</span>
-                  <button type="button" class="op-mini-copy" onclick="copySampleResponse('${ep.id}')" title="Copy sample JSON">
-                    Copy
-                  </button>
+                  <span class="op-sample-label">Sample Response (${isMultipart ? 'text/csv' : 'application/json'}):</span>
+                  <div class="op-sample-actions">
+                    <button type="button" class="op-view-toggle-btn" id="btn-show-live-${ep.id}" onclick="setResponseTab('${ep.id}', 'live')" style="display: none;" title="Return to live response">
+                      View Live
+                    </button>
+                    <button type="button" class="op-mini-copy" onclick="copySampleResponse('${ep.id}')" title="Copy sample">
+                      Copy
+                    </button>
+                  </div>
                 </div>
-                <pre class="op-code-pre"><code>${sampleResponseStr}</code></pre>
+                <pre class="op-code-pre"><code>${escapeHtml(sampleResponseStr)}</code></pre>
               </div>
             </div>
           </div>
@@ -426,7 +581,7 @@ function renderOperations() {
 }
 
 /**
- * Execute real HTTP request against the gateway
+ * Execute real HTTP request against the live gateway
  */
 async function executeEndpoint(epId) {
   const ep = findEndpoint(epId);
@@ -453,20 +608,43 @@ async function executeEndpoint(epId) {
   const url = `${BASE_URL}${ep.path}`;
   let options = {
     method: ep.method,
-    headers: { "Accept": "application/json" }
+    headers: {}
   };
+
+  if (ep.method === "GET") {
+    if (ep.responseType === "html") {
+      options.headers["Accept"] = "text/html, */*";
+    } else {
+      options.headers["Accept"] = "application/json, */*";
+    }
+  }
 
   if (ep.method === "POST") {
     const textarea = document.getElementById(`payload-${epId}`);
     const rawVal = textarea ? textarea.value.trim() : "";
-    try {
-      const parsed = JSON.parse(rawVal);
-      options.headers["Content-Type"] = "application/json";
-      options.body = JSON.stringify(parsed);
-    } catch (err) {
-      alert("Invalid JSON format in request body. Please check commas and quotes.");
-      resetExecBtn(execBtn);
-      return;
+
+    if (ep.contentType === "multipart/form-data") {
+      // Build real multipart/form-data containing the CSV file
+      const formData = new FormData();
+      const csvBlob = new Blob([rawVal], { type: "text/csv" });
+      formData.append("file", csvBlob, "comments.csv");
+      formData.append("threshold", "0.5");
+      formData.append("targetColumn", "text");
+
+      options.body = formData;
+      options.headers["Accept"] = "text/csv, application/json, */*";
+      // Note: do NOT set Content-Type header; browser must populate multipart boundary automatically.
+    } else {
+      try {
+        const parsed = JSON.parse(rawVal);
+        options.headers["Content-Type"] = "application/json";
+        options.headers["Accept"] = "application/json";
+        options.body = JSON.stringify(parsed);
+      } catch (err) {
+        alert("Invalid JSON format in request body. Please verify double quotes and syntax.");
+        resetExecBtn(execBtn);
+        return;
+      }
     }
   }
 
@@ -476,36 +654,58 @@ async function executeEndpoint(epId) {
     const res = await fetch(url, options);
     const latency = Math.round(performance.now() - startTime);
 
-    let data;
-    const text = await res.text();
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
+    const contentType = res.headers.get("content-type") || "";
+    const rawText = await res.text();
+
+    let displayOutput = rawText;
+    if (contentType.includes("application/json")) {
+      try {
+        const parsedJson = JSON.parse(rawText);
+        displayOutput = JSON.stringify(parsedJson, null, 2);
+      } catch {
+        displayOutput = rawText;
+      }
     }
 
-    if (liveBox) liveBox.style.display = "block";
     if (liveTime) liveTime.textContent = `~${latency}ms`;
 
     if (liveCode && livePill) {
-      liveCode.textContent = `${res.status} ${res.statusText || 'OK'}`;
+      liveCode.textContent = `${res.status} ${res.statusText || (res.ok ? 'OK' : 'Error')}`;
       livePill.className = "op-live-status-pill " + (res.ok ? "status-success" : (res.status >= 500 ? "status-error" : "status-warn"));
     }
 
     if (liveOutput) {
-      liveOutput.textContent = typeof data === "object" ? JSON.stringify(data, null, 2) : data;
+      liveOutput.textContent = displayOutput;
     }
+
+    const tabLiveLabel = document.getElementById(`tab-live-label-${epId}`);
+    if (tabLiveLabel) {
+      tabLiveLabel.textContent = `Live (${res.status})`;
+    }
+
+    // Switch to single Live view (hides sample view, preventing double view)
+    setResponseTab(epId, "live");
   } catch (err) {
     const latency = Math.round(performance.now() - startTime);
-    if (liveBox) liveBox.style.display = "block";
     if (liveTime) liveTime.textContent = `~${latency}ms`;
     if (liveCode && livePill) {
       liveCode.textContent = "Network Error";
       livePill.className = "op-live-status-pill status-error";
     }
     if (liveOutput) {
-      liveOutput.textContent = `// Failed to fetch live gateway route.\n// Ensure https://idkhowtocodefr-hf-backend.hf.space is running and CORS is permitted.\n// Error: ${err.message}`;
+      const isFileProtocol = window.location.protocol === "file:";
+      liveOutput.textContent = `// Network Request Failed\n// Target URL: ${url}\n// Error: ${err.message}\n` +
+        (isFileProtocol
+          ? `// Note: When opening index.html via local file:// protocol, browser security blocks CORS.\n// Run: 'python -m http.server 8000 --directory frontend' and open http://localhost:8000\n// Or visit GitHub Pages at https://rachit-mangawa.github.io/hf-backend/`
+          : `// Ensure ${BASE_URL} is awake and reachable.`);
     }
+
+    const tabLiveLabel = document.getElementById(`tab-live-label-${epId}`);
+    if (tabLiveLabel) {
+      tabLiveLabel.textContent = "Live (Error)";
+    }
+
+    setResponseTab(epId, "live");
   } finally {
     resetExecBtn(execBtn);
   }
@@ -524,6 +724,41 @@ function resetExecBtn(btn) {
 }
 
 /**
+ * Switch between Live Response view and Sample Contract view
+ * Ensures only ONE view is displayed at a time (preventing double view)
+ */
+function setResponseTab(epId, tabName) {
+  const liveBox = document.getElementById(`live-box-${epId}`);
+  const sampleBox = document.getElementById(`sample-box-${epId}`);
+  const tabLive = document.getElementById(`tab-live-${epId}`);
+  const tabSample = document.getElementById(`tab-sample-${epId}`);
+  const btnShowLive = document.getElementById(`btn-show-live-${epId}`);
+
+  if (tabName === "live") {
+    if (sampleBox) sampleBox.style.display = "none";
+    if (liveBox) liveBox.style.display = "flex";
+    if (tabLive) {
+      tabLive.style.display = "inline-flex";
+      tabLive.classList.add("active");
+    }
+    if (tabSample) tabSample.classList.remove("active");
+    if (btnShowLive) btnShowLive.style.display = "none";
+  } else {
+    // Show sample contract
+    if (liveBox) liveBox.style.display = "none";
+    if (sampleBox) sampleBox.style.display = "flex";
+    if (tabSample) tabSample.classList.add("active");
+    if (tabLive) tabLive.classList.remove("active");
+
+    // If liveBox has executed output, show "View Live" button in the sample bar
+    const liveCode = document.getElementById(`live-output-${epId}`);
+    if (btnShowLive && liveCode && liveCode.textContent.trim()) {
+      btnShowLive.style.display = "inline-block";
+    }
+  }
+}
+
+/**
  * Generate and copy cURL command
  */
 function copyEndpointCurl(epId) {
@@ -533,32 +768,43 @@ function copyEndpointCurl(epId) {
   const url = `${BASE_URL}${ep.path}`;
   let cmd = "";
 
-  if (ep.method === "GET") {
-    cmd = `curl -X GET "${url}"`;
-  } else {
+  if (ep.contentType === "multipart/form-data") {
+    cmd = `curl -X POST "${url}" \\\n  -F "file=@comments.csv" \\\n  -F "threshold=0.5" \\\n  -F "targetColumn=text"`;
+  } else if (ep.method === "POST") {
     const textarea = document.getElementById(`payload-${epId}`);
     const rawVal = textarea ? textarea.value.trim() : JSON.stringify(ep.samplePayload);
-    // Compact JSON for cURL command
     let compact = rawVal;
     try {
       compact = JSON.stringify(JSON.parse(rawVal));
     } catch {}
     cmd = `curl -X POST "${url}" \\\n  -H "Content-Type: application/json" \\\n  -d '${compact}'`;
+  } else {
+    cmd = `curl -X GET "${url}"`;
   }
 
   copyToClipboard(cmd, `btn-curl-${epId}`, "Copy cURL");
 }
 
 /**
- * Reset payload textarea to original sample
+ * Reset payload textarea to original sample and restore sample response view
  */
 function resetEndpointPayload(epId) {
   const ep = findEndpoint(epId);
-  if (!ep || !ep.samplePayload) return;
-  const textarea = document.getElementById(`payload-${epId}`);
-  if (textarea) {
-    textarea.value = JSON.stringify(ep.samplePayload, null, 2);
+  if (!ep) return;
+  if (ep.samplePayload) {
+    const textarea = document.getElementById(`payload-${epId}`);
+    if (textarea) {
+      textarea.value = typeof ep.samplePayload === "string"
+        ? ep.samplePayload
+        : JSON.stringify(ep.samplePayload, null, 2);
+    }
   }
+  // Reset response view back to Sample only
+  setResponseTab(epId, "sample");
+  const tabLive = document.getElementById(`tab-live-${epId}`);
+  if (tabLive) tabLive.style.display = "none";
+  const btnShowLive = document.getElementById(`btn-show-live-${epId}`);
+  if (btnShowLive) btnShowLive.style.display = "none";
 }
 
 /**
@@ -577,7 +823,10 @@ function copyLiveResponse(epId) {
 function copySampleResponse(epId) {
   const ep = findEndpoint(epId);
   if (ep && ep.sampleResponse) {
-    navigator.clipboard.writeText(JSON.stringify(ep.sampleResponse, null, 2));
+    const val = typeof ep.sampleResponse === "string"
+      ? ep.sampleResponse
+      : JSON.stringify(ep.sampleResponse, null, 2);
+    navigator.clipboard.writeText(val);
   }
 }
 
@@ -640,6 +889,12 @@ function escapeHtml(str) {
 
 // Initialize on DOM load
 document.addEventListener("DOMContentLoaded", () => {
+  // Sync target URL in info bar
+  const targetBaseCode = document.getElementById("gw-base-url-code");
+  if (targetBaseCode) {
+    targetBaseCode.textContent = BASE_URL;
+  }
+
   // Setup copy base URL widget in hero
   const copyBaseBtn = document.getElementById("copy-base-btn");
   if (copyBaseBtn) {

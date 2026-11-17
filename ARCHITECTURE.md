@@ -190,3 +190,25 @@ Features:
 * Gateway specifications detailing active payload caps, execution timeouts, docs paths, and CORS origins.
 * Raw JSON inspector displaying formatted `/health` telemetry with one-click copy.
 * Zero external CDN dependencies, using inline CSS and vanilla JavaScript for full offline and strict CSP compatibility.
+
+---
+
+## Automated keep-alive & Space lifecycle persistence
+
+Hugging Face Spaces on the free tier enter idle sleep after 48 hours without inbound network traffic. Waking a sleeping Space incurs cold-boot latency while the container initialises and loads model checkpoints into memory.
+
+To ensure constant uptime and immediate (<100ms) request serving:
+
+```mermaid
+flowchart LR
+    GHA["GitHub Actions Scheduler<br/>(15 */12 * * *)"] -- "12h Cadence<br/>(00:15 & 12:15 UTC)" --> Ping["cURL Ping (/health)"]
+    Ping -- "HTTP 200" --> HF["Hugging Face Space<br/>(Resets 48h idle timer)"]
+    Ping -. "Transient 5xx / Refused" .-> Retry["Retry Backoff<br/>(--retry 3 --retry-delay 5)"]
+    Retry --> HF
+```
+
+* **12-Hour Cadence vs. 24-Hour Cadence**:
+  * Free Spaces allow a 48-hour inactivity window. A 24-hour cron offers only a single backup run; any delay or failure leaves the Space vulnerable to sleeping.
+  * A 12-hour cron (`15 */12 * * *`) guarantees three consecutive buffer cycles before reaching 48 hours, absorbing GitHub Actions queue latencies and transient network failures.
+  * Off-peak minute scheduling (`:15`) avoids peak-hour scheduler congestion common at top-of-the-hour (`:00`).
+* **Connection Resiliency**: The ping command executes with `--retry 3 --retry-delay 5 --retry-connrefused --max-time 30` to prevent transient network issues from failing the keep-alive cycle.
