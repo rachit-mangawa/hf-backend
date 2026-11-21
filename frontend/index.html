@@ -193,7 +193,7 @@
             APIRouter. Faults in one service do not crash the gateway.</p>
         </div>
 
-        <div class="services-grid">
+        <div class="services-grid" id="services-grid">
           <!-- HeartFlow OS Card -->
           <article class="service-card" id="card-heartflow">
             <div class="service-card-header">
@@ -325,18 +325,18 @@
 
         <div class="swagger-console">
           <!-- Gateway Selector Tabs -->
-          <div class="gateway-tabs-bar" role="tablist" aria-label="Select Gateway">
-            <button class="gateway-tab active" id="tab-gw-hf" role="tab" aria-selected="true"
+          <div class="gateway-tabs-bar" id="gateway-tabs-bar" role="tablist" aria-label="Select Gateway">
+            <button class="gateway-tab active" id="tab-gw-hf" data-gw="hf-backend" role="tab" aria-selected="true"
               onclick="selectGateway('hf-backend')">
               <span class="gw-tag">GATEWAY</span>
               <span class="gw-name">/hf-backend</span>
             </button>
-            <button class="gateway-tab" id="tab-gw-heartflow" role="tab" aria-selected="false"
+            <button class="gateway-tab" id="tab-gw-heartflow" data-gw="heartflow" role="tab" aria-selected="false"
               onclick="selectGateway('heartflow')">
               <span class="gw-tag">ML SERVICE</span>
               <span class="gw-name">/heartflow</span>
             </button>
-            <button class="gateway-tab" id="tab-gw-semantic" role="tab" aria-selected="false"
+            <button class="gateway-tab" id="tab-gw-semantic" data-gw="semantic" role="tab" aria-selected="false"
               onclick="selectGateway('semantic')">
               <span class="gw-tag">NLP SERVICE</span>
               <span class="gw-name">/semantic</span>

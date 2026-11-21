@@ -6,7 +6,15 @@ on:
       - main
     paths:
       - "frontend/**"
+      - "registry.py"
+      - "requirements.in"
+      - "scripts/**"
       - ".github/workflows/deploy_pages.yml"
+      - ".github/workflows/deploy.yml"
+  workflow_run:
+    workflows: ["Deploy and Restart HF Space"]
+    types:
+      - completed
   workflow_dispatch:
 
 # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
@@ -28,6 +36,15 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Auto-discover & Sync Registered Projects to Frontend
+        run: |
+          python scripts/generate_frontend_registry.py
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5

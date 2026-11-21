@@ -1,0 +1,56 @@
+{
+  "generated_at": null,
+  "total_projects": 2,
+  "projects": [
+    {
+      "name": "Semantic Analyzer",
+      "description": "Multi-task NLP inference engine for developer and community feedback. Computes dense sentence embeddings, polarity scores, and multi-label toxicity classifications with pre-warmed weights.",
+      "tag": "NLP SERVICE",
+      "repoUrl": "https://github.com/rachit-mangawa/Semantic-Comment-Analyze",
+      "liveUrl": "https://rachit-mangawa.github.io/Semantic-Comment-Analyze/",
+      "specs": [
+        {
+          "label": "Embedding",
+          "value": "MiniLM-L6-v2"
+        },
+        {
+          "label": "Toxicity",
+          "value": "Multi-label"
+        },
+        {
+          "label": "Latency",
+          "value": "~18ms CPU"
+        }
+      ],
+      "icon": "icons/semantic.svg",
+      "iconClass": "icon-blue",
+      "prefix": "/semantic",
+      "target": "semantic_backend.router:router"
+    },
+    {
+      "name": "HeartFlow OS",
+      "description": "Clinical cardiovascular risk scoring and interpretability engine. Evaluates vitals, computes local SHAP feature attributions, and compiles TinyML C header artifacts for embedded microcontrollers.",
+      "tag": "ML SERVICE",
+      "repoUrl": "https://github.com/rachit-mangawa/HEARTFLOW_OS",
+      "liveUrl": "https://rachit-mangawa.github.io/HEARTFLOW_OS/",
+      "specs": [
+        {
+          "label": "ROC-AUC",
+          "value": "94.2%"
+        },
+        {
+          "label": "Explainability",
+          "value": "SHAP Tree"
+        },
+        {
+          "label": "Edge Target",
+          "value": "TinyML C99"
+        }
+      ],
+      "icon": "icons/heartflow.svg",
+      "iconClass": "icon-emerald",
+      "prefix": "/heartflow",
+      "target": "heartflow_backend.router:router"
+    }
+  ]
+}

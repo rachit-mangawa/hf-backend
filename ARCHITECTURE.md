@@ -193,6 +193,20 @@ Features:
 
 ---
 
+## Object & Model Weight Bucket Storage
+
+For large assets (checkpoints, embeddings, dataset splits), subprojects offload binary data to an object storage bucket rather than committing large files to Git.
+
+The gateway exposes unified environment variables:
+* `STORAGE_BUCKET_NAME` / `BUCKET_NAME` / `HF_BUCKET_NAME`: The target bucket identifier (e.g. `rachit-mangawa/hf-backend-storage` or `hf://buckets/...`).
+* `STORAGE_ENDPOINT_URL` / `S3_ENDPOINT_URL`: S3-compatible endpoint (e.g. `https://s3.hf.co` for Hugging Face S3 Gateway, Cloudflare R2, or AWS).
+* `STORAGE_REGION` / `AWS_REGION`: Storage region (e.g. `us-east-1` or `auto`).
+* `STORAGE_ACCESS_KEY_ID` & `STORAGE_SECRET_ACCESS_KEY`: Standard S3-compatible credentials.
+
+Subprojects read these configurations at runtime via `os.getenv()`, and during the Docker build prefetch phase to populate `/home/user/hf-cache`. For complete subproject packaging and deployment instructions, refer to [`Upload.md`](Upload.md).
+
+---
+
 ## Automated keep-alive & Space lifecycle persistence
 
 Hugging Face Spaces on the free tier enter idle sleep after 48 hours without inbound network traffic. Waking a sleeping Space incurs cold-boot latency while the container initialises and loads model checkpoints into memory.

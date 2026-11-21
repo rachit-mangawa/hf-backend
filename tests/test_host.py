@@ -70,25 +70,34 @@ def test_host_with_mocks(monkeypatch, caplog):
             assert "/broken" in health_data["failed"]
             assert health_data["warm_status"]["/semantic"] == "warmed"
 
-            # Verify GET / returns same info as /health
+            # Verify GET / points nowhere but an empty message
             res_root = client.get("/")
             assert res_root.status_code == 200
-            assert res_root.json() == health_data
+            assert res_root.json() == {"message": ""}
 
             res_sem = client.get("/semantic/ping")
             assert res_sem.status_code == 200
             assert res_sem.json() == {"project": "semantic", "status": "ok"}
 
-            for doc_url in ["/docs", "/redoc"]:
+            # Verify global doc listings are vanished
+            for doc_url in ["/docs", "/redoc", "/project", "/projects", "/openapi.json"]:
                 assert client.get(doc_url).status_code == 404
 
-            res_docs = client.get("/project")
-            assert res_docs.status_code == 200
-            assert "swagger" in res_docs.text.lower() or "text/html" in res_docs.headers.get("content-type", "")
+            # Verify /{project} points to all of the project's APIs
+            res_sem_docs = client.get("/semantic", headers={"Accept": "text/html"})
+            assert res_sem_docs.status_code == 200
+            assert "swagger" in res_sem_docs.text.lower() or "text/html" in res_sem_docs.headers.get("content-type", "")
 
-            res_openapi = client.get("/openapi.json")
-            assert res_openapi.status_code == 200
-            assert "paths" in res_openapi.json()
+            res_sem_json = client.get("/semantic")
+            assert res_sem_json.status_code == 200
+            sem_json_data = res_sem_json.json()
+            assert sem_json_data["prefix"] == "/semantic"
+            assert any(ep["path"] == "/semantic/ping" for ep in sem_json_data["endpoints"])
+
+            res_sem_openapi = client.get("/semantic/openapi.json")
+            assert res_sem_openapi.status_code == 200
+            assert "/semantic/ping" in res_sem_openapi.json()["paths"]
+            assert "/broken" not in str(res_sem_openapi.json()["paths"])
 
             # Security headers verification
             assert res_health.headers.get("x-content-type-options") == "nosniff"
@@ -174,7 +183,7 @@ def test_warmup_success(monkeypatch):
 
         res_root = client.get("/")
         assert res_root.status_code == 200
-        assert res_root.json() == data
+        assert res_root.json() == {"message": ""}
 
 
 def test_warmup_exception(monkeypatch):
@@ -332,7 +341,7 @@ def test_real_registry():
 
         res_root = client.get("/")
         assert res_root.status_code == 200
-        assert res_root.json() == data
+        assert res_root.json() == {"message": ""}
 
         # Check Semantic /health endpoint reports models_loaded
         res_sem = client.get("/semantic/health")
@@ -351,8 +360,29 @@ def test_real_registry():
         assert hf_data["status"] == "Healthy"
         assert hf_data["models_loaded"] is True
 
+        # Check global /project and /projects are vanished
+        assert client.get("/project").status_code == 404
+        assert client.get("/projects").status_code == 404
+
+        # Check /{project} points to all APIs of that project
+        res_sem_p = client.get("/semantic")
+        assert res_sem_p.status_code == 200
+        assert res_sem_p.json()["prefix"] == "/semantic"
+        assert any(e["path"] == "/semantic/health" for e in res_sem_p.json()["endpoints"])
+
+        res_hf_p = client.get("/heartflow")
+        assert res_hf_p.status_code == 200
+        assert res_hf_p.json()["prefix"] == "/heartflow"
+        assert any(e["path"] == "/heartflow/health" for e in res_hf_p.json()["endpoints"])
+
 
 def test_status_page_and_content_negotiation():
+    create_mock_modules()
+    import registry
+    registry.PROJECT_REGISTRY = {
+        "/semantic": "mock_semantic.router:router",
+    }
+
     if "main" in sys.modules:
         del sys.modules["main"]
 
@@ -365,27 +395,28 @@ def test_status_page_and_content_negotiation():
         assert "HF Backend" in res_status.text
         assert "Registered Services" in res_status.text
 
-        # 2. Browser request to root with Accept: text/html returns HTML
-        res_browser = client.get("/", headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"})
-        assert res_browser.status_code == 200
-        assert "text/html" in res_browser.headers.get("content-type", "")
-        assert "HF Backend" in res_browser.text
+        # 2. Normal / points nowhere but an empty message
+        res_root = client.get("/")
+        assert res_root.status_code == 200
+        assert res_root.json() == {"message": ""}
 
-        # 3. Explicit format query param
-        res_fmt_html = client.get("/?format=html")
-        assert res_fmt_html.status_code == 200
-        assert "text/html" in res_fmt_html.headers.get("content-type", "")
+        res_root_html = client.get("/", headers={"Accept": "text/html"})
+        assert res_root_html.status_code == 200
+        assert res_root_html.json() == {"message": ""}
 
-        res_fmt_json = client.get("/?format=json")
-        assert res_fmt_json.status_code == 200
-        assert "application/json" in res_fmt_json.headers.get("content-type", "")
-        assert res_fmt_json.json()["status"] in ["healthy", "degraded", "unhealthy"]
+        # 3. Global /project and /projects are vanished
+        assert client.get("/project").status_code == 404
+        assert client.get("/projects").status_code == 404
 
-        # 4. Machine/API request (e.g. curl or monitoring probe) gets JSON by default
-        res_api = client.get("/")
-        assert res_api.status_code == 200
-        assert "application/json" in res_api.headers.get("content-type", "")
-        assert res_api.json()["status"] in ["healthy", "degraded", "unhealthy"]
+        # 4. /{project} points to all APIs for that project
+        res_proj_html = client.get("/semantic", headers={"Accept": "text/html"})
+        assert res_proj_html.status_code == 200
+        assert "swagger" in res_proj_html.text.lower() or "text/html" in res_proj_html.headers.get("content-type", "")
+
+        res_proj_json = client.get("/semantic?format=json")
+        assert res_proj_json.status_code == 200
+        assert res_proj_json.json()["prefix"] == "/semantic"
+        assert any(ep["path"] == "/semantic/ping" for ep in res_proj_json.json()["endpoints"])
 
 
 def test_host_websocket_through_middleware(monkeypatch):
@@ -443,6 +474,109 @@ def test_docs_killswitch(monkeypatch):
     import main
     with TestClient(main.app) as client:
         assert client.get("/project").status_code == 404
+        assert client.get("/projects").status_code == 404
         assert client.get("/openapi.json").status_code == 404
         assert client.get("/docs").status_code == 404
         assert client.get("/redoc").status_code == 404
+        assert client.get("/semantic/openapi.json").status_code == 404
+
+
+def test_storage_bucket_configured(monkeypatch):
+    create_mock_modules()
+    monkeypatch.setenv("STORAGE_BUCKET_NAME", "my-ml-models-bucket")
+    monkeypatch.setenv("STORAGE_ENDPOINT_URL", "https://s3.hf.co")
+    monkeypatch.setenv("STORAGE_REGION", "us-east-1")
+    monkeypatch.setenv("DISABLE_PROJECTS", "")
+
+    import registry
+    registry.PROJECT_REGISTRY = {
+        "/semantic": "mock_semantic.router:router",
+    }
+
+    if "main" in sys.modules:
+        del sys.modules["main"]
+
+    import main
+    info = main.get_gateway_info()
+    assert info["storage_bucket"] == "my-ml-models-bucket"
+    assert info["storage_endpoint"] == "https://s3.hf.co"
+    assert info["storage_region"] == "us-east-1"
+
+    with TestClient(main.app) as client:
+        res_status = client.get("/status")
+        assert res_status.status_code == 200
+        assert "my-ml-models-bucket" in res_status.text
+        assert "Configured" in res_status.text
+
+
+def test_storage_bucket_default_unset(monkeypatch):
+    create_mock_modules()
+    monkeypatch.delenv("STORAGE_BUCKET_NAME", raising=False)
+    monkeypatch.delenv("BUCKET_NAME", raising=False)
+    monkeypatch.delenv("HF_BUCKET_NAME", raising=False)
+    monkeypatch.delenv("STORAGE_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("STORAGE_REGION", raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.setenv("DISABLE_PROJECTS", "")
+
+    import registry
+    registry.PROJECT_REGISTRY = {
+        "/semantic": "mock_semantic.router:router",
+    }
+
+    if "main" in sys.modules:
+        del sys.modules["main"]
+
+    import main
+    info = main.get_gateway_info()
+    assert info["storage_bucket"] is None
+    assert info["storage_endpoint"] is None
+    assert info["storage_region"] is None
+
+    with TestClient(main.app) as client:
+        res_status = client.get("/status")
+        assert res_status.status_code == 200
+        assert "Not Configured" in res_status.text
+
+
+def test_generate_frontend_registry():
+    from scripts.generate_frontend_registry import sync_registry
+    projects = sync_registry()
+    prefixes = [p["prefix"] for p in projects]
+    assert "/semantic" in prefixes
+    assert "/heartflow" in prefixes
+    for p in projects:
+        assert "name" in p
+        assert "prefix" in p
+        assert "target" in p
+        assert "description" in p
+
+
+def test_storage_module_helpers(monkeypatch, tmp_path):
+    import storage
+    
+    # 1. Unset bucket
+    monkeypatch.delenv("STORAGE_BUCKET_NAME", raising=False)
+    monkeypatch.delenv("BUCKET_NAME", raising=False)
+    monkeypatch.delenv("HF_BUCKET_NAME", raising=False)
+    info = storage.get_storage_info()
+    assert info["configured"] is False
+    assert info["bucket_name"] is None
+
+    # Unconfigured download & upload should safely return False
+    dummy_file = tmp_path / "dummy.txt"
+    dummy_file.write_text("hello")
+    assert storage.download_from_bucket("remote/file.txt", tmp_path / "dest.txt") is False
+    assert storage.upload_to_bucket(dummy_file, "remote/file.txt") is False
+
+    # 2. Configured bucket info
+    monkeypatch.setenv("STORAGE_BUCKET_NAME", "my-org/my-bucket")
+    monkeypatch.setenv("STORAGE_ENDPOINT_URL", "https://s3.hf.co")
+    monkeypatch.setenv("STORAGE_REGION", "us-east-1")
+    info = storage.get_storage_info()
+    assert info["configured"] is True
+    assert info["bucket_name"] == "my-org/my-bucket"
+    assert info["endpoint_url"] == "https://s3.hf.co"
+    assert info["region"] == "us-east-1"
+

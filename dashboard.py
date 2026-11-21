@@ -21,7 +21,19 @@ def render_statuspage(
 
     max_size_mb = round(gateway_cfg.get("max_body_size_bytes", 10485760) / (1024 * 1024), 1)
     timeout_s = round(gateway_cfg.get("request_timeout_seconds", 60.0), 1)
-    docs_url = gateway_cfg.get("docs_url", "/project")
+    docs_url = gateway_cfg.get("docs_url") or (list(loaded.keys())[0] if loaded else "/status")
+    storage_bucket = gateway_cfg.get("storage_bucket")
+    storage_endpoint = gateway_cfg.get("storage_endpoint")
+    storage_region = gateway_cfg.get("storage_region")
+
+    if storage_bucket:
+        endpoint_text = f" &bull; <code>{html.escape(storage_endpoint)}</code>" if storage_endpoint else ""
+        region_text = f" ({html.escape(storage_region)})" if storage_region else ""
+        storage_bucket_detail = f"Connected to <code>{html.escape(storage_bucket)}</code>{endpoint_text}{region_text}"
+        storage_bucket_pill = '<span class="pill pill-success">Configured</span>'
+    else:
+        storage_bucket_detail = "Optional: attach storage via <code>STORAGE_BUCKET_NAME</code> or <code>BUCKET_NAME</code>"
+        storage_bucket_pill = '<span class="pill pill-neutral">Not Configured</span>'
 
     themes = {
         "healthy": ("All Systems Operational", "rgba(16, 185, 129, 0.1)", "rgba(16, 185, 129, 0.25)", "#10b981"),
@@ -65,7 +77,7 @@ def render_statuspage(
                   </div>
                   <div class="endpoint-actions">
                     <button type="button" class="action-btn" onclick="copySnippet('curl -s http://localhost:7860{r_path}')" title="Copy cURL command">cURL</button>
-                    <a href="{html.escape(docs_url)}" class="action-btn" title="Open in Swagger UI">Docs</a>
+                    <a href="{html.escape(prefix)}" class="action-btn" title="Open in Swagger UI">Docs</a>
                   </div>
                 </div>
                 """
@@ -871,13 +883,18 @@ def render_statuspage(
             </tr>
             <tr>
               <td><code>Interactive API Documentation</code></td>
-              <td>Swagger UI at <code>{html.escape(docs_url)}</code></td>
-              <td><span class="pill pill-success">Online</span></td>
+              <td>Dedicated Swagger UI at <code>/{html.escape(list(loaded.keys())[0] if loaded else "{project}")}</code> (isolated per project)</td>
+              <td><span class="pill pill-success">Isolated</span></td>
             </tr>
             <tr>
               <td><code>Container Pre-warming</code></td>
               <td>Weights baked into Docker layer via <code>prefetch.py</code></td>
               <td><span class="pill pill-success">Baked</span></td>
+            </tr>
+            <tr>
+              <td><code>Object / Asset Storage Bucket</code></td>
+              <td>{storage_bucket_detail}</td>
+              <td>{storage_bucket_pill}</td>
             </tr>
           </tbody>
         </table>
@@ -898,9 +915,8 @@ def render_statuspage(
     <footer>
       <span>HF Backend &bull; Hugging Face Docker Space</span>
       <div class="footer-links">
-        <a href="{html.escape(docs_url)}">Swagger Docs</a>
+        <a href="/status">Status Console</a>
         <a href="/health">/health</a>
-        <a href="/openapi.json">OpenAPI Spec</a>
         <a href="https://github.com/rachit-mangawa/hf-backend" target="_blank" rel="noopener">GitHub</a>
       </div>
     </footer>

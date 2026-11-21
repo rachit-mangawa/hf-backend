@@ -368,20 +368,18 @@ let currentGateway = "hf-backend";
 let openedOperations = new Set(["hf-health"]);
 
 /**
- * Switch the active gateway (/hf-backend, /heartflow, /semantic)
+ * Switch the active gateway (/hf-backend, /heartflow, /semantic, or any dynamically mounted service)
  */
 function selectGateway(gwKey) {
   if (!GATEWAYS[gwKey]) return;
   currentGateway = gwKey;
 
-  // Update Gateway Tabs
-  const tabHf = document.getElementById("tab-gw-hf");
-  const tabHeartflow = document.getElementById("tab-gw-heartflow");
-  const tabSemantic = document.getElementById("tab-gw-semantic");
-
-  if (tabHf) tabHf.classList.toggle("active", gwKey === "hf-backend");
-  if (tabHeartflow) tabHeartflow.classList.toggle("active", gwKey === "heartflow");
-  if (tabSemantic) tabSemantic.classList.toggle("active", gwKey === "semantic");
+  // Update Gateway Tabs dynamically
+  document.querySelectorAll(".gateway-tab").forEach(tab => {
+    const isThis = tab.dataset.gw === gwKey;
+    tab.classList.toggle("active", isThis);
+    tab.setAttribute("aria-selected", String(isThis));
+  });
 
   // Update Gateway Info Header
   const titleEl = document.getElementById("gw-current-title");
@@ -390,7 +388,7 @@ function selectGateway(gwKey) {
   if (descEl) descEl.textContent = GATEWAYS[gwKey].description;
 
   // Default open the first operation of this gateway
-  const firstEp = GATEWAYS[gwKey].endpoints[0];
+  const firstEp = GATEWAYS[gwKey].endpoints ? GATEWAYS[gwKey].endpoints[0] : null;
   if (firstEp) {
     openedOperations.add(firstEp.id);
   }
@@ -846,8 +844,12 @@ function findEndpoint(epId) {
  */
 function activatePlayground(endpointId) {
   let targetGw = "hf-backend";
-  if (endpointId.startsWith("heartflow")) targetGw = "heartflow";
-  if (endpointId.startsWith("semantic")) targetGw = "semantic";
+  for (const [key, gw] of Object.entries(GATEWAYS)) {
+    if (gw.endpoints && gw.endpoints.some(e => e.id === endpointId)) {
+      targetGw = key;
+      break;
+    }
+  }
 
   selectGateway(targetGw);
   toggleOperation(endpointId, true);
@@ -855,6 +857,282 @@ function activatePlayground(endpointId) {
   const targetCard = document.getElementById(`op-${endpointId}`);
   if (targetCard) {
     targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+/**
+ * Format route or service prefix into display title
+ */
+function formatTitle(str) {
+  if (!str) return "";
+  const clean = str.replace(/^\//, "").replace(/[-_]/g, " ");
+  return clean.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+/**
+ * Recursive sample generator from OpenAPI schema
+ */
+function generateSampleFromSchema(schema) {
+  if (!schema) return null;
+  if (schema.example !== undefined) return schema.example;
+  if (schema.default !== undefined) return schema.default;
+  if (schema.type === "object" || schema.properties) {
+    const obj = {};
+    for (const [k, prop] of Object.entries(schema.properties || {})) {
+      obj[k] = generateSampleFromSchema(prop);
+    }
+    return obj;
+  }
+  if (schema.type === "array" || schema.items) {
+    return [generateSampleFromSchema(schema.items) || "sample_value"];
+  }
+  if (schema.type === "string") return schema.format === "date-time" ? "2026-11-21T00:00:00Z" : "sample_text";
+  if (schema.type === "integer" || schema.type === "number") return 1;
+  if (schema.type === "boolean") return true;
+  return {};
+}
+
+/**
+ * Dynamically mounts a service into GATEWAYS, #gateway-tabs-bar, and #services-grid
+ */
+function registerDynamicService(data) {
+  if (!data || !data.prefix) return;
+  const prefix = data.prefix.startsWith("/") ? data.prefix : `/${data.prefix}`;
+  const key = prefix.replace(/^\//, "").replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!key) return;
+
+  const title = data.name || formatTitle(key);
+  const desc = data.description || `Pluggable Python microservice mounted at ${prefix}.`;
+  const tag = data.tag || "SERVICE";
+  const iconClass = data.iconClass || "icon-blue";
+
+  // 1. Initialize or update GATEWAYS map
+  if (!GATEWAYS[key]) {
+    GATEWAYS[key] = {
+      name: title,
+      description: desc,
+      endpoints: data.endpoints && data.endpoints.length > 0 ? data.endpoints : [
+        {
+          id: `${key}-health`,
+          method: "GET",
+          path: `${prefix}/health`,
+          summary: `${title} Health Check`,
+          description: `Returns runtime health and readiness status for ${title}.`,
+          samplePayload: null,
+          sampleResponse: { "status": "healthy", "service": key }
+        }
+      ]
+    };
+  } else if (data.endpoints && data.endpoints.length > 0) {
+    const existingIds = new Set(GATEWAYS[key].endpoints.map(e => e.id));
+    for (const ep of data.endpoints) {
+      if (!existingIds.has(ep.id)) {
+        GATEWAYS[key].endpoints.push(ep);
+      }
+    }
+  }
+
+  // 2. Add Tab in Gateway Explorer Bar if missing
+  let tab = document.querySelector(`.gateway-tab[data-gw="${key}"]`);
+  if (!tab) {
+    const tabsBar = document.getElementById("gateway-tabs-bar");
+    if (tabsBar) {
+      tab = document.createElement("button");
+      tab.className = "gateway-tab";
+      tab.id = `tab-gw-${key}`;
+      tab.dataset.gw = key;
+      tab.role = "tab";
+      tab.setAttribute("aria-selected", "false");
+      tab.onclick = () => selectGateway(key);
+      tab.innerHTML = `
+        <span class="gw-tag">${escapeHtml(tag)}</span>
+        <span class="gw-name">${escapeHtml(prefix)}</span>
+      `;
+      tabsBar.appendChild(tab);
+    }
+  }
+
+  // 3. Add Service Card in #services-grid if missing
+  let card = document.getElementById(`card-${key}`);
+  if (!card) {
+    const servicesGrid = document.getElementById("services-grid");
+    if (servicesGrid) {
+      card = document.createElement("article");
+      card.className = "service-card";
+      card.id = `card-${key}`;
+
+      const firstEndpoint = GATEWAYS[key].endpoints[0];
+      const tryBtn = firstEndpoint
+        ? `<button class="btn btn-secondary btn-xs" onclick="activatePlayground('${escapeHtml(firstEndpoint.id)}')">Try Endpoint</button>`
+        : `<button class="btn btn-secondary btn-xs" onclick="selectGateway('${escapeHtml(key)}')">View Docs</button>`;
+
+      const repoLink = data.repoUrl
+        ? `<a href="${escapeHtml(data.repoUrl)}" target="_blank" rel="noopener noreferrer" class="link-subtle"><span>GitHub</span></a>`
+        : "";
+
+      const liveLink = data.liveUrl && data.liveUrl !== data.repoUrl
+        ? `<a href="${escapeHtml(data.liveUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-xs"><span>View Live</span></a>`
+        : "";
+
+      const specs = data.specs || [
+        { label: "Protocol", value: "FastAPI" },
+        { label: "Target", value: prefix },
+        { label: "Status", value: "Active" }
+      ];
+
+      const specsHtml = specs.map(s => `
+        <div class="spec-tag"><span>${escapeHtml(s.label)}</span><strong>${escapeHtml(s.value)}</strong></div>
+      `).join("");
+
+      const routeListHtml = GATEWAYS[key].endpoints.slice(0, 3).map(ep => {
+        const m = ep.method.toLowerCase();
+        return `<li><code class="method ${m}">${escapeHtml(ep.method)}</code><code>${escapeHtml(ep.path)}</code><span class="route-hint">${escapeHtml(ep.summary || "")}</span></li>`;
+      }).join("") || `<li><code class="method get">GET</code><code>${escapeHtml(prefix)}/health</code><span class="route-hint">Health Check</span></li>`;
+
+      card.innerHTML = `
+        <div class="service-card-header">
+          <div class="service-icon ${escapeHtml(iconClass)}">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+          </div>
+          <div class="service-meta">
+            <div class="service-prefix">${escapeHtml(prefix)}</div>
+            <h3 class="service-name">${escapeHtml(title)}</h3>
+          </div>
+          <span class="pill pill-success">Active</span>
+        </div>
+
+        <p class="service-body">${escapeHtml(desc)}</p>
+
+        <div class="service-specs">
+          ${specsHtml}
+        </div>
+
+        <div class="service-routes">
+          <span class="route-label">Key Endpoints</span>
+          <ul class="route-list" id="route-list-${key}">
+            ${routeListHtml}
+          </ul>
+        </div>
+
+        <div class="service-footer">
+          <div class="service-links-left">
+            ${liveLink}
+            ${repoLink}
+          </div>
+          ${tryBtn}
+        </div>
+      `;
+
+      servicesGrid.appendChild(card);
+    }
+  } else {
+    const routeList = document.getElementById(`route-list-${key}`);
+    if (routeList && GATEWAYS[key].endpoints && GATEWAYS[key].endpoints.length > 0) {
+      routeList.innerHTML = GATEWAYS[key].endpoints.slice(0, 3).map(ep => {
+        const m = ep.method.toLowerCase();
+        return `<li><code class="method ${m}">${escapeHtml(ep.method)}</code><code>${escapeHtml(ep.path)}</code><span class="route-hint">${escapeHtml(ep.summary || "")}</span></li>`;
+      }).join("");
+    }
+  }
+}
+
+/**
+ * Automatically syncs services from registry.json and live OpenAPI schema
+ */
+async function syncLiveBackendServices() {
+  // 1. Fetch registry.json generated at build/workflow time
+  try {
+    const regRes = await fetch("registry.json");
+    if (regRes.ok) {
+      const regData = await regRes.json();
+      if (regData.projects && Array.isArray(regData.projects)) {
+        for (const proj of regData.projects) {
+          registerDynamicService(proj);
+        }
+      }
+    }
+  } catch (err) {
+    console.debug("registry.json fetch note:", err);
+  }
+
+  // 2. Fetch live OpenAPI schema from Hugging Face Space
+  try {
+    const openapiRes = await fetch(`${BASE_URL}/openapi.json`, { signal: AbortSignal.timeout(6000) });
+    if (!openapiRes.ok) return;
+    const openapi = await openapiRes.json();
+    if (!openapi.paths) return;
+
+    const discoveredByPrefix = {};
+
+    for (const [path, methods] of Object.entries(openapi.paths)) {
+      if (path === "/" || path === "/health" || path === "/status" || path === "/openapi.json" || path === "/project" || path === "/favicon.ico") {
+        continue;
+      }
+      const match = path.match(/^\/([^/]+)/);
+      if (!match) continue;
+      const gwKey = match[1];
+      const prefix = `/${gwKey}`;
+
+      if (!discoveredByPrefix[gwKey]) {
+        discoveredByPrefix[gwKey] = {
+          prefix,
+          key: gwKey,
+          name: formatTitle(gwKey),
+          description: `FastAPI microservice endpoints mounted at ${prefix}`,
+          tag: "SERVICE",
+          endpoints: []
+        };
+      }
+
+      for (const [method, op] of Object.entries(methods)) {
+        if (method === "parameters") continue;
+        const opId = op.operationId || `${gwKey}-${method}-${path.replace(/[^a-zA-Z0-9]/g, "-")}`;
+        const summary = op.summary || op.description || path;
+        const description = op.description || op.summary || "";
+
+        let samplePayload = null;
+        let contentType = "application/json";
+        if (op.requestBody && op.requestBody.content) {
+          if (op.requestBody.content["multipart/form-data"]) {
+            contentType = "multipart/form-data";
+          } else if (op.requestBody.content["application/json"]) {
+            const schema = op.requestBody.content["application/json"].schema;
+            samplePayload = generateSampleFromSchema(schema);
+          }
+        }
+
+        let sampleResponse = { "status": "ok" };
+        if (op.responses && op.responses["200"] && op.responses["200"].content && op.responses["200"].content["application/json"]) {
+          const respSchema = op.responses["200"].content["application/json"].schema;
+          sampleResponse = generateSampleFromSchema(respSchema) || sampleResponse;
+        }
+
+        discoveredByPrefix[gwKey].endpoints.push({
+          id: opId,
+          method: method.toUpperCase(),
+          path,
+          summary,
+          description,
+          contentType,
+          samplePayload,
+          sampleResponse
+        });
+      }
+    }
+
+    for (const [gwKey, disc] of Object.entries(discoveredByPrefix)) {
+      registerDynamicService(disc);
+    }
+
+    if (GATEWAYS[currentGateway]) {
+      renderOperations();
+    }
+  } catch (err) {
+    console.debug("Live OpenAPI discovery skipped (Space sleeping or offline):", err);
   }
 }
 
@@ -903,6 +1181,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Render operations
+  // Render initial static operations
   selectGateway("hf-backend");
+
+  // Synchronize new projects from workflow registry.json and live OpenAPI schema
+  syncLiveBackendServices();
 });

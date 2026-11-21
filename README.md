@@ -13,6 +13,9 @@ An aggregation gateway that hosts and monitors multiple Python subprojects withi
 
 The gateway mounts standalone package routers under dedicated URL prefixes, providing shared infrastructure: build-time model prefetching, memory warmups at boot, streaming payload guards, security headers, unified Swagger UI documentation, and health telemetry.
 
+> [!IMPORTANT]
+> **Deploying a new project?** Read the complete step-by-step deployment guide in [**Upload.md**](Upload.md) before integrating any subproject, microservice, or storage bucket into this gateway.
+
 Read [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/ARCHITECTURE.md) for technical specifications, build caching mechanics, and subproject integration contracts.
 
 ---
@@ -21,11 +24,13 @@ Read [ARCHITECTURE.md](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-
 
 | Resource | Path | Description |
 | :--- | :--- | :--- |
-| Interactive API docs | [`/` or `/project`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L236) | Swagger UI documenting all mounted subproject routes |
+| **Subproject Deployment Guide** | [**`Upload.md`**](Upload.md) | **Step-by-step deployment and upload guide for adding new projects** |
+| Root Entrypoint | `/` | Returns an empty message (`{"message": ""}`) |
+| Project API Docs | `/{project}` (e.g. [`/heartflow`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L320), [`/semantic`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L320)) | Scoped Swagger UI and API endpoint explorer for that specific project |
+| Project OpenAPI | `/{project}/openapi.json` | Scoped OpenAPI 3.1 specification for that specific project |
 | Frontend Portal | [`frontend/`](frontend/index.html) | Interactive showcase deployed to GitHub Pages |
 | Developer console | [`/status`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L220) | Real-time status console with endpoint explorer and cURL snippets |
 | Health endpoint | [`/health`](file:///c:/Users/manga/Projects/github/rachit-mangawa/hf-backend/main.py#L201) | Machine-readable JSON health and readiness payload |
-| OpenAPI schema | `/openapi.json` | OpenAPI 3.1 specification |
 
 ---
 
@@ -52,6 +57,9 @@ If any registered service fails to import or encounters an error during startup 
 ---
 
 ## Mounting a new service
+
+> [!TIP]
+> Before deploying any new project, please consult the complete step-by-step guide in [**`Upload.md`**](Upload.md). It covers packaging, storage bucket checkpoint uploads, Docker caching, and local testing.
 
 Mounting any Python package takes two steps:
 
@@ -80,7 +88,7 @@ Compile `requirements.txt` using `uv` or `pip-compile`:
 uv pip compile requirements.in -o requirements.txt --python-version 3.11 --python-platform linux --extra-index-url https://download.pytorch.org/whl/cpu --emit-index-url
 ```
 
-When changes land on `main`, the build pipeline installs the dependency, prefetches any model checkpoints declared in its `warmup()` function, and hot-mounts the router.
+When changes land on `main`, the build pipeline installs the dependency, prefetches any model checkpoints declared in its `warmup()` function, and hot-mounts the router. Simultaneously, `.github/workflows/deploy_pages.yml` auto-synchronizes the newly registered project into the live [Frontend Portal](https://rachit-mangawa.github.io/hf-backend/), creating service cards and interactive Swagger-style test consoles with zero manual HTML/JS editing required.
 
 ---
 
@@ -142,6 +150,11 @@ Configure these settings in the Hugging Face Space under **Settings > Variables 
 | `MAX_BODY_SIZE_BYTES` | `10485760` (10 MB) | Maximum incoming request body size before returning HTTP 413. |
 | `REQUEST_TIMEOUT_SECONDS` | `60.0` | Timeout per request before returning HTTP 504. |
 | `WARMUP_TIMEOUT_SECONDS` | `300.0` | Maximum time allowed for each package warmup call at boot. |
+| `STORAGE_BUCKET_NAME` | *(none)* | Configurable bucket name or URI for model weights/assets (`hf://buckets/...` or S3 bucket). Fallbacks: `BUCKET_NAME`, `HF_BUCKET_NAME`. |
+| `STORAGE_ENDPOINT_URL` | *(none)* | Custom endpoint URL for S3/HF Buckets (e.g. `https://s3.hf.co` or Cloudflare R2). Fallback: `S3_ENDPOINT_URL`. |
+| `STORAGE_REGION` | *(none)* | Storage bucket region (e.g. `us-east-1` or `auto`). Fallback: `AWS_REGION`. |
+| `STORAGE_ACCESS_KEY_ID` | *(none)* | Access Key ID for bucket operations (Secret). |
+| `STORAGE_SECRET_ACCESS_KEY` | *(none)* | Secret Access Key for bucket operations (Secret). |
 | `GITHUB_TOKEN` | *(none)* | Personal access token used during Docker build to clone private repos. |
 
 ---
