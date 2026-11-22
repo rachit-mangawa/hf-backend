@@ -50,7 +50,7 @@ jobs:
 
           # Create an isolated orphan branch containing strictly backend files
           git checkout --orphan hf-sync
-          git rm -rf --cached frontend/ scripts/ .github/ 2>/dev/null || true
+          git rm -rf --cached frontend/ scripts/ .github/ docs/ tests/ *.md 2>/dev/null || true
           git commit -m "deploy: sync backend to huggingface space [skip ci]"
 
           echo "Syncing code to Hugging Face Space: $SPACE_REPO..."

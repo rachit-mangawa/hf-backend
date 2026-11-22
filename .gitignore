@@ -12,3 +12,7 @@ image.png
 *.key
 *.cert
 *.crt
+
+# Documentation & Local Superpowers/Planning Artifacts
+docs/
+.superpowers/
