@@ -51,7 +51,7 @@ jobs:
           # Create an isolated orphan branch containing strictly backend files
           git checkout --orphan hf-sync
           git reset
-          git add Dockerfile main.py dashboard.py storage.py registry.py prefetch.py requirements.in requirements.txt .dockerignore
+          git add README.md Dockerfile main.py dashboard.py storage.py registry.py prefetch.py requirements.in requirements.txt .dockerignore
           git commit -m "deploy: sync backend to huggingface space [skip ci]"
 
           echo "Syncing code to Hugging Face Space: $SPACE_REPO..."
